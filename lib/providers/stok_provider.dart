@@ -1,0 +1,45 @@
+import 'package:flutter/material.dart';
+import '../models/stok_model.dart';
+import '../services/stok_service.dart';
+
+class StokProvider extends ChangeNotifier {
+  final StokService _service = StokService();
+
+  List<StokMutasi> _mutasiList = [];
+  List<StokMutasi> get mutasiList => _mutasiList;
+
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+
+  Future<void> fetchMutasi() async {
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      _mutasiList = await _service.getAllMutasi();
+    } catch (e) {
+      debugPrint('Error fetchMutasi: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateStok({
+    required int obatId,
+    required String jenis,
+    required int jumlah,
+    String? catatan,
+  }) async {
+    final success = await _service.updateStok(
+      obatId: obatId,
+      jenis: jenis,
+      jumlah: jumlah,
+      catatan: catatan,
+    );
+    if (success) {
+      await fetchMutasi();
+    }
+    return success;
+  }
+}

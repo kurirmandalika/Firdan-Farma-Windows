@@ -27,7 +27,7 @@ class StokMutasi {
       jumlah: map['jumlah'] as int,
       catatan: map['catatan'] as String?,
       tanggal: map['tanggal'] as String,
-      namaObat: map['nama_obat'] as String?,
+      namaObat: map['nama_obat'] as String? ?? '(Obat telah dihapus)',
     );
   }
 

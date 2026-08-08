@@ -4,7 +4,11 @@ import '../models/obat_model.dart';
 class ObatService {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  Future<List<Obat>> getAll({String? searchQuery, int? kategoriId}) async {
+  Future<List<Obat>> getAll({
+    String? searchQuery,
+    int? kategoriId,
+    bool includeInactive = false,
+  }) async {
     final db = await _dbHelper.database;
     String sql = '''
       SELECT o.*, k.nama AS nama_kategori, s.nama AS nama_supplier
@@ -14,6 +18,10 @@ class ObatService {
       WHERE 1=1
     ''';
     List<dynamic> args = [];
+
+    if (!includeInactive) {
+      sql += ' AND o.is_active = 1';
+    }
 
     if (kategoriId != null && kategoriId > 0) {
       sql += ' AND o.kategori_id = ?';
@@ -39,7 +47,7 @@ class ObatService {
       FROM obat o
       LEFT JOIN kategori_obat k ON o.kategori_id = k.id
       LEFT JOIN supplier s ON o.supplier_id = s.id
-      WHERE o.stok_tersedia <= o.stok_minimal
+      WHERE o.is_active = 1 AND o.stok_tersedia <= o.stok_minimal
       ORDER BY o.stok_tersedia ASC
     ''';
     final maps = await db.rawQuery(sql);
@@ -95,6 +103,39 @@ class ObatService {
 
   Future<int> delete(int id) async {
     final db = await _dbHelper.database;
-    return await db.delete('obat', where: 'id = ?', whereArgs: [id]);
+    final txMaps = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM detail_transaksi WHERE obat_id = ?',
+      [id],
+    );
+    final stokMaps = await db.rawQuery(
+      'SELECT COUNT(*) as count FROM stok WHERE obat_id = ?',
+      [id],
+    );
+
+    final txCount = txMaps.first['count'] as int? ?? 0;
+    final stokCount = stokMaps.first['count'] as int? ?? 0;
+
+    if (txCount > 0 || stokCount > 0) {
+      // Soft delete
+      return await db.update(
+        'obat',
+        {'is_active': 0},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } else {
+      // Hard delete
+      return await db.delete('obat', where: 'id = ?', whereArgs: [id]);
+    }
+  }
+
+  Future<int> reactivate(int id) async {
+    final db = await _dbHelper.database;
+    return await db.update(
+      'obat',
+      {'is_active': 1},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 }

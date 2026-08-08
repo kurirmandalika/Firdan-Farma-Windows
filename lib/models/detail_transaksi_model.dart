@@ -29,8 +29,8 @@ class DetailTransaksi {
       jumlah: map['jumlah'] as int,
       hargaSatuan: (map['harga_satuan'] as num).toDouble(),
       subtotal: (map['subtotal'] as num).toDouble(),
-      namaObat: map['nama_obat'] as String?,
-      kodeObat: map['kode_obat'] as String?,
+      namaObat: map['nama_obat'] as String? ?? '(Obat telah dihapus)',
+      kodeObat: map['kode_obat'] as String? ?? '-',
     );
   }
 

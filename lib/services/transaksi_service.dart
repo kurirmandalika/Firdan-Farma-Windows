@@ -122,7 +122,7 @@ class TransaksiService {
       final detailMaps = await db.rawQuery('''
         SELECT d.*, o.nama AS nama_obat, o.kode_obat AS kode_obat
         FROM detail_transaksi d
-        JOIN obat o ON d.obat_id = o.id
+        LEFT JOIN obat o ON d.obat_id = o.id
         WHERE d.transaksi_id = ?
       ''', [txId]);
 

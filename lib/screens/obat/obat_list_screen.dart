@@ -48,7 +48,7 @@ class _ObatListScreenState extends State<ObatListScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Konfirmasi Hapus'),
-        content: Text('Apakah Anda yakin ingin menghapus data obat "$namaObat"?'),
+        content: Text('Apakah Anda yakin ingin menghapus data obat "$namaObat"?\n(Jika obat sudah pernah digunakan dalam transaksi/stok, obat akan dinonaktifkan).'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
@@ -58,9 +58,59 @@ class _ObatListScreenState extends State<ObatListScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRed),
             onPressed: () async {
               Navigator.of(context).pop();
-              await Provider.of<ObatProvider>(context, listen: false).deleteObat(obatId);
+              try {
+                await Provider.of<ObatProvider>(context, listen: false).deleteObat(obatId);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Berhasil memperbarui status obat')),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Gagal menghapus data obat: $e'), backgroundColor: AppTheme.dangerRed),
+                  );
+                }
+              }
             },
             child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmReactivate(int obatId, String namaObat) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Aktifkan Kembali Obat'),
+        content: Text('Apakah Anda yakin ingin mengaktifkan kembali obat "$namaObat"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryTeal),
+            onPressed: () async {
+              Navigator.of(context).pop();
+              try {
+                await Provider.of<ObatProvider>(context, listen: false).reactivateObat(obatId);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Obat berhasil diaktifkan kembali')),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Gagal mengaktifkan obat: $e'), backgroundColor: AppTheme.dangerRed),
+                  );
+                }
+              }
+            },
+            child: const Text('Aktifkan'),
           ),
         ],
       ),
@@ -135,7 +185,7 @@ class _ObatListScreenState extends State<ObatListScreen> {
                   builder: (context, katProv, _) {
                     final selectedKatId = Provider.of<ObatProvider>(context).selectedKategoriId;
                     return SizedBox(
-                      width: 220,
+                      width: 200,
                       child: DropdownButtonFormField<int?>(
                         value: selectedKatId,
                         decoration: const InputDecoration(
@@ -156,6 +206,27 @@ class _ObatListScreenState extends State<ObatListScreen> {
                           Provider.of<ObatProvider>(context, listen: false).setKategoriFilter(val);
                         },
                       ),
+                    );
+                  },
+                ),
+                const SizedBox(width: 16),
+                Consumer<ObatProvider>(
+                  builder: (context, obatProv, _) {
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Checkbox(
+                          value: obatProv.showInactive,
+                          activeColor: AppTheme.primaryTeal,
+                          onChanged: (val) {
+                            obatProv.setShowInactive(val ?? false);
+                          },
+                        ),
+                        const Text(
+                          'Tampilkan Nonaktif',
+                          style: TextStyle(fontSize: 13, color: AppTheme.textPrimary),
+                        ),
+                      ],
                     );
                   },
                 ),
@@ -194,7 +265,7 @@ class _ObatListScreenState extends State<ObatListScreen> {
                           DataColumn(label: Text('SUPPLIER', style: TextStyle(fontWeight: FontWeight.bold))),
                           DataColumn(label: Text('HARGA BELI', style: TextStyle(fontWeight: FontWeight.bold))),
                           DataColumn(label: Text('HARGA JUAL', style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text('STOK', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('STOK / STATUS', style: TextStyle(fontWeight: FontWeight.bold))),
                           DataColumn(label: Text('AKSI', style: TextStyle(fontWeight: FontWeight.bold))),
                         ],
                         rows: obatProv.obatList.map((obat) {
@@ -205,7 +276,15 @@ class _ObatListScreenState extends State<ObatListScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Text(obat.nama, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  Text(
+                                    obat.nama,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      decoration: obat.isActive ? null : TextDecoration.lineThrough,
+                                      color: obat.isActive ? AppTheme.textPrimary : AppTheme.textMuted,
+                                    ),
+                                  ),
                                   if (obat.deskripsi != null && obat.deskripsi!.isNotEmpty)
                                     Text(obat.deskripsi!, style: const TextStyle(fontSize: 11, color: AppTheme.textMuted), maxLines: 1),
                                 ],
@@ -215,23 +294,33 @@ class _ObatListScreenState extends State<ObatListScreen> {
                               DataCell(Text(currencyFormatter.format(obat.hargaBeli), style: const TextStyle(fontSize: 12))),
                               DataCell(Text(currencyFormatter.format(obat.hargaJual), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.primaryTeal, fontSize: 13))),
                               DataCell(
-                                obat.isHabis
-                                    ? CustomBadge.danger('Habis (0)')
-                                    : obat.isStokMenipis
-                                        ? CustomBadge.warning('${obat.stokTersedia} unit')
-                                        : CustomBadge.success('${obat.stokTersedia} unit'),
+                                !obat.isActive
+                                    ? CustomBadge.warning('Nonaktif')
+                                    : obat.isHabis
+                                        ? CustomBadge.danger('Habis (0)')
+                                        : obat.isStokMenipis
+                                            ? CustomBadge.warning('${obat.stokTersedia} unit')
+                                            : CustomBadge.success('${obat.stokTersedia} unit'),
                               ),
                               DataCell(
                                 Row(
                                   children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.edit_outlined, color: AppTheme.primaryTeal, size: 20),
-                                      onPressed: () => _showObatDialog(obat: obat),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline, color: AppTheme.dangerRed, size: 20),
-                                      onPressed: () => _confirmDelete(obat.id!, obat.nama),
-                                    ),
+                                    if (obat.isActive) ...[
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_outlined, color: AppTheme.primaryTeal, size: 20),
+                                        onPressed: () => _showObatDialog(obat: obat),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, color: AppTheme.dangerRed, size: 20),
+                                        onPressed: () => _confirmDelete(obat.id!, obat.nama),
+                                      ),
+                                    ] else ...[
+                                      IconButton(
+                                        icon: const Icon(Icons.restore_outlined, color: AppTheme.primaryTeal, size: 20),
+                                        tooltip: 'Aktifkan Kembali',
+                                        onPressed: () => _confirmReactivate(obat.id!, obat.nama),
+                                      ),
+                                    ],
                                   ],
                                 ),
                               ),

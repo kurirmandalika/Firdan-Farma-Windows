@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../database/database_helper.dart';
 
 class BackupService {
@@ -36,16 +38,46 @@ class BackupService {
       throw Exception('File backup yang dipilih tidak dapat dibaca!');
     }
 
-    // 1. Close active DB connection
-    await _dbHelper.closeAndReset();
+    // 1. Validate SQLite database file structure before doing anything
+    Database? tempDb;
+    try {
+      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+        sqfliteFfiInit();
+        databaseFactory = databaseFactoryFfi;
+      }
+      tempDb = await databaseFactory.openDatabase(
+        sourceFilePath,
+        options: OpenDatabaseOptions(readOnly: true),
+      );
+      final tables = await tempDb.rawQuery("SELECT name FROM sqlite_master WHERE type='table'");
+      final tableNames = tables.map((t) => t['name'] as String).toSet();
+      final requiredTables = {'obat', 'transaksi', 'stok', 'detail_transaksi'};
 
-    // 2. Overwrite target DB file
+      if (!requiredTables.every((t) => tableNames.contains(t))) {
+        throw Exception('Skema database tidak sesuai! Tabel utama apotek tidak ditemukan.');
+      }
+    } catch (e) {
+      throw Exception('File backup tidak valid atau rusak:\n$e');
+    } finally {
+      await tempDb?.close();
+    }
+
+    // 2. Create automatic safety backup of current active database
     final targetDbPath = await _dbHelper.getDbPath();
     final targetFile = File(targetDbPath);
+    if (await targetFile.exists()) {
+      final timeStr = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
+      final autoBackupPath = p.join(targetFile.parent.path, 'backup_auto_before_restore_$timeStr.db');
+      await targetFile.copy(autoBackupPath);
+    }
 
+    // 3. Close active DB connection
+    await _dbHelper.closeAndReset();
+
+    // 4. Overwrite target DB file
     await sourceFile.copy(targetFile.path);
 
-    // 3. Re-open database
+    // 5. Re-open database
     await _dbHelper.database;
     return true;
   }

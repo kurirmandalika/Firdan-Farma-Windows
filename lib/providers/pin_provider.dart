@@ -57,4 +57,14 @@ class PinProvider extends ChangeNotifier {
     }
     return success;
   }
+
+  Future<bool> resetPin() async {
+    final success = await _service.removePin();
+    if (success) {
+      _hasPinSet = false;
+      _isUnlocked = true;
+      notifyListeners();
+    }
+    return success;
+  }
 }

@@ -33,11 +33,12 @@ class DatabaseHelper {
     return await databaseFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onConfigure: (db) async {
           await db.execute('PRAGMA foreign_keys = ON');
         },
         onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
       ),
     );
   }
@@ -49,6 +50,12 @@ class DatabaseHelper {
       await db.close();
     }
     _database = null;
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE obat ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -81,6 +88,7 @@ class DatabaseHelper {
         stok_minimal INTEGER NOT NULL DEFAULT 5,
         stok_tersedia INTEGER NOT NULL DEFAULT 0,
         deskripsi TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT NOT NULL,
         FOREIGN KEY (kategori_id) REFERENCES kategori_obat(id),
         FOREIGN KEY (supplier_id) REFERENCES supplier(id)

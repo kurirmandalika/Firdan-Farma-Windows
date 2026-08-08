@@ -48,10 +48,10 @@ class LaporanService {
 
     // Estimate profit = sum( (harga_satuan - harga_beli) * jumlah )
     final profitMaps = await db.rawQuery('''
-      SELECT COALESCE(SUM((d.harga_satuan - o.harga_beli) * d.jumlah), 0) as total_profit
+      SELECT COALESCE(SUM((d.harga_satuan - COALESCE(o.harga_beli, 0)) * d.jumlah), 0) as total_profit
       FROM detail_transaksi d
       JOIN transaksi t ON d.transaksi_id = t.id
-      JOIN obat o ON d.obat_id = o.id
+      LEFT JOIN obat o ON d.obat_id = o.id
       WHERE t.tanggal >= ? AND t.tanggal <= ?
     ''', [dariStr, sampaiStr]);
 
@@ -65,17 +65,29 @@ class LaporanService {
     );
   }
 
-  Future<List<ObatTerlarisItem>> getObatTerlaris({int limit = 5}) async {
+  Future<List<ObatTerlarisItem>> getObatTerlaris(
+    DateTime dari,
+    DateTime sampai, {
+    int limit = 5,
+  }) async {
     final db = await _dbHelper.database;
+    final dariStr = dari.toIso8601String().substring(0, 10);
+    final sampaiStr = sampai.toIso8601String().substring(0, 10) + 'T23:59:59';
+
     final sql = '''
-      SELECT o.nama AS nama_obat, o.kode_obat, SUM(d.jumlah) AS total_terjual, SUM(d.subtotal) AS total_subtotal
+      SELECT COALESCE(o.nama, '(Obat telah dihapus)') AS nama_obat,
+             COALESCE(o.kode_obat, '-') AS kode_obat,
+             SUM(d.jumlah) AS total_terjual,
+             SUM(d.subtotal) AS total_subtotal
       FROM detail_transaksi d
-      JOIN obat o ON d.obat_id = o.id
+      JOIN transaksi t ON d.transaksi_id = t.id
+      LEFT JOIN obat o ON d.obat_id = o.id
+      WHERE t.tanggal >= ? AND t.tanggal <= ?
       GROUP BY d.obat_id
       ORDER BY total_terjual DESC
       LIMIT ?
     ''';
-    final maps = await db.rawQuery(sql, [limit]);
+    final maps = await db.rawQuery(sql, [dariStr, sampaiStr, limit]);
     return maps.map((m) => ObatTerlarisItem(
       namaObat: m['nama_obat'] as String,
       kodeObat: m['kode_obat'] as String,

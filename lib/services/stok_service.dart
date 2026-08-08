@@ -9,7 +9,7 @@ class StokService {
     final sql = '''
       SELECT s.*, o.nama AS nama_obat
       FROM stok s
-      JOIN obat o ON s.obat_id = o.id
+      LEFT JOIN obat o ON s.obat_id = o.id
       ORDER BY s.tanggal DESC
     ''';
     final maps = await db.rawQuery(sql);

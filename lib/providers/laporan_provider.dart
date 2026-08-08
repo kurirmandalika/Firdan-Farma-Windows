@@ -25,7 +25,7 @@ class LaporanProvider extends ChangeNotifier {
 
     try {
       _ringkasan = await _service.getRingkasan(_dariTanggal, _sampaiTanggal);
-      _obatTerlaris = await _service.getObatTerlaris(limit: 5);
+      _obatTerlaris = await _service.getObatTerlaris(_dariTanggal, _sampaiTanggal, limit: 5);
     } catch (e) {
       debugPrint('Error fetchLaporan: $e');
     } finally {

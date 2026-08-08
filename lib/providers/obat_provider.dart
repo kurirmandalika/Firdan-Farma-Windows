@@ -20,6 +20,9 @@ class ObatProvider extends ChangeNotifier {
   int? _selectedKategoriId;
   int? get selectedKategoriId => _selectedKategoriId;
 
+  bool _showInactive = false;
+  bool get showInactive => _showInactive;
+
   Future<void> fetchObat() async {
     _isLoading = true;
     notifyListeners();
@@ -28,6 +31,7 @@ class ObatProvider extends ChangeNotifier {
       _obatList = await _service.getAll(
         searchQuery: _searchQuery,
         kategoriId: _selectedKategoriId,
+        includeInactive: _showInactive,
       );
       _lowStockList = await _service.getLowStock();
     } catch (e) {
@@ -36,6 +40,11 @@ class ObatProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  void setShowInactive(bool value) {
+    _showInactive = value;
+    fetchObat();
   }
 
   void setSearchQuery(String query) {
@@ -77,6 +86,17 @@ class ObatProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('Error deleteObat: $e');
+      rethrow;
+    }
+  }
+
+  Future<bool> reactivateObat(int id) async {
+    try {
+      await _service.reactivate(id);
+      await fetchObat();
+      return true;
+    } catch (e) {
+      debugPrint('Error reactivateObat: $e');
       rethrow;
     }
   }

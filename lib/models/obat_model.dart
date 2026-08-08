@@ -9,6 +9,7 @@ class Obat {
   final int stokMinimal;
   final int stokTersedia;
   final String? deskripsi;
+  final bool isActive;
   final String createdAt;
 
   // Extra joined fields for display UI
@@ -26,6 +27,7 @@ class Obat {
     this.stokMinimal = 5,
     this.stokTersedia = 0,
     this.deskripsi,
+    this.isActive = true,
     required this.createdAt,
     this.namaKategori,
     this.namaSupplier,
@@ -46,6 +48,7 @@ class Obat {
       stokMinimal: map['stok_minimal'] as int? ?? 5,
       stokTersedia: map['stok_tersedia'] as int? ?? 0,
       deskripsi: map['deskripsi'] as String?,
+      isActive: (map['is_active'] as int? ?? 1) == 1,
       createdAt: map['created_at'] as String? ?? DateTime.now().toIso8601String(),
       namaKategori: map['nama_kategori'] as String?,
       namaSupplier: map['nama_supplier'] as String?,
@@ -64,6 +67,7 @@ class Obat {
       'stok_minimal': stokMinimal,
       'stok_tersedia': stokTersedia,
       'deskripsi': deskripsi,
+      'is_active': isActive ? 1 : 0,
       'created_at': createdAt,
     };
   }
@@ -79,6 +83,7 @@ class Obat {
     int? stokMinimal,
     int? stokTersedia,
     String? deskripsi,
+    bool? isActive,
     String? createdAt,
     String? namaKategori,
     String? namaSupplier,
@@ -94,6 +99,7 @@ class Obat {
       stokMinimal: stokMinimal ?? this.stokMinimal,
       stokTersedia: stokTersedia ?? this.stokTersedia,
       deskripsi: deskripsi ?? this.deskripsi,
+      isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
       namaKategori: namaKategori ?? this.namaKategori,
       namaSupplier: namaSupplier ?? this.namaSupplier,

@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/pin_provider.dart';
+import '../../services/pin_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/app_constants.dart';
 
@@ -16,8 +18,50 @@ class PinGateScreen extends StatefulWidget {
 class _PinGateScreenState extends State<PinGateScreen> {
   String _pinInput = '';
   String _errorMessage = '';
+  int _lockoutSeconds = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLockoutStatus();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _checkLockoutStatus() async {
+    final remaining = await PinService().getRemainingLockoutSeconds();
+    if (remaining > 0 && mounted) {
+      setState(() {
+        _lockoutSeconds = remaining;
+      });
+      _startLockoutTimer();
+    }
+  }
+
+  void _startLockoutTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_lockoutSeconds > 1 && mounted) {
+        setState(() {
+          _lockoutSeconds--;
+        });
+      } else if (mounted) {
+        timer.cancel();
+        setState(() {
+          _lockoutSeconds = 0;
+          _errorMessage = '';
+        });
+      }
+    });
+  }
 
   void _onKeyPress(String digit) {
+    if (_lockoutSeconds > 0) return;
     if (_pinInput.length < 6) {
       setState(() {
         _pinInput += digit;
@@ -30,6 +74,7 @@ class _PinGateScreenState extends State<PinGateScreen> {
   }
 
   void _onBackspace() {
+    if (_lockoutSeconds > 0) return;
     if (_pinInput.isNotEmpty) {
       setState(() {
         _pinInput = _pinInput.substring(0, _pinInput.length - 1);
@@ -41,28 +86,76 @@ class _PinGateScreenState extends State<PinGateScreen> {
   Future<void> _submitPin() async {
     final pinProvider = Provider.of<PinProvider>(context, listen: false);
     if (pinProvider.hasPinSet) {
-      final valid = await pinProvider.unlock(_pinInput);
-      if (!valid) {
+      try {
+        final valid = await pinProvider.unlock(_pinInput);
+        if (!valid) {
+          setState(() {
+            _pinInput = '';
+            _errorMessage = 'PIN Salah! Silakan coba lagi.';
+          });
+        }
+      } catch (e) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
         setState(() {
           _pinInput = '';
-          _errorMessage = 'PIN Salah! Silakan coba lagi.';
+          _errorMessage = msg;
         });
+        await _checkLockoutStatus();
       }
     } else {
-      // Setup initial PIN
-      await pinProvider.setupNewPin(_pinInput);
+      try {
+        await pinProvider.setupNewPin(_pinInput);
+      } catch (e) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        setState(() {
+          _pinInput = '';
+          _errorMessage = msg;
+        });
+      }
     }
   }
 
+  void _showResetPinDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset / Lupa PIN'),
+        content: const Text(
+          'Mereset PIN akan menghapus PIN pengaman saat ini dan Anda akan diminta membuat PIN baru saat membuka aplikasi.\n\nApakah Anda yakin ingin menghapus PIN lama?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRed),
+            onPressed: () async {
+              Navigator.of(context).pop();
+              await Provider.of<PinProvider>(context, listen: false).resetPin();
+              setState(() {
+                _pinInput = '';
+                _errorMessage = '';
+                _lockoutSeconds = 0;
+              });
+            },
+            child: const Text('Reset PIN'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildKeypadButton(String text, {VoidCallback? onPressed, Widget? child}) {
+    final isDisabled = _lockoutSeconds > 0;
     return Container(
       margin: const EdgeInsets.all(6),
       child: Material(
-        color: AppTheme.cardBg,
+        color: isDisabled ? AppTheme.bgLight : AppTheme.cardBg,
         borderRadius: BorderRadius.circular(16),
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: onPressed ?? () => _onKeyPress(text),
+          onTap: isDisabled ? null : (onPressed ?? () => _onKeyPress(text)),
           child: Container(
             width: 72,
             height: 72,
@@ -73,7 +166,11 @@ class _PinGateScreenState extends State<PinGateScreen> {
             ),
             child: child ?? Text(
               text,
-              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: isDisabled ? AppTheme.textMuted : AppTheme.textPrimary,
+              ),
             ),
           ),
         ),
@@ -166,10 +263,24 @@ class _PinGateScreenState extends State<PinGateScreen> {
                       );
                     }),
                   ),
-                  if (_errorMessage.isNotEmpty) ...[
+                  if (_lockoutSeconds > 0) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.dangerRed.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Terkunci! Coba lagi dalam $_lockoutSeconds detik',
+                        style: const TextStyle(color: AppTheme.dangerRed, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ] else if (_errorMessage.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Text(
                       _errorMessage,
+                      textAlign: TextAlign.center,
                       style: const TextStyle(color: AppTheme.dangerRed, fontSize: 12, fontWeight: FontWeight.bold),
                     ),
                   ],
@@ -203,6 +314,14 @@ class _PinGateScreenState extends State<PinGateScreen> {
                       ),
                     ],
                   ),
+                  if (pinProvider.hasPinSet) ...[
+                    const SizedBox(height: 16),
+                    TextButton.icon(
+                      onPressed: _showResetPinDialog,
+                      icon: const Icon(Icons.help_outline, size: 16, color: AppTheme.textMuted),
+                      label: const Text('Lupa PIN?', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                    ),
+                  ],
                 ],
               ),
             ),

@@ -26,7 +26,8 @@ class AppProvider extends ChangeNotifier {
   }
 
   Future<void> _initSpreadsheetStatus() async {
-    _connectedSpreadsheetPath = await _spreadsheetService.getConnectedSpreadsheetPath();
+    _connectedSpreadsheetPath = await _spreadsheetService
+        .getConnectedSpreadsheetPath();
     notifyListeners();
   }
 

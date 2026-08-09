@@ -19,7 +19,7 @@ class CartItem {
 class TransaksiProvider extends ChangeNotifier {
   final TransaksiService _service = TransaksiService();
 
-  List<CartItem> _cartItems = [];
+  final List<CartItem> _cartItems = [];
   List<CartItem> get cartItems => _cartItems;
 
   List<Transaksi> _transaksiList = [];

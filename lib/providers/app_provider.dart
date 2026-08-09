@@ -7,6 +7,9 @@ class AppProvider extends ChangeNotifier {
   int _selectedNavIndex = 0;
   int get selectedNavIndex => _selectedNavIndex;
 
+  bool _isSidebarCollapsed = false;
+  bool get isSidebarCollapsed => _isSidebarCollapsed;
+
   String? _connectedSpreadsheetPath;
   String? get connectedSpreadsheetPath => _connectedSpreadsheetPath;
 
@@ -22,6 +25,21 @@ class AppProvider extends ChangeNotifier {
 
   void setNavIndex(int index) {
     _selectedNavIndex = index;
+    notifyListeners();
+  }
+
+  void toggleSidebar() {
+    _isSidebarCollapsed = !_isSidebarCollapsed;
+    notifyListeners();
+  }
+
+  void setSidebarCollapsed(bool value) {
+    _isSidebarCollapsed = value;
+    notifyListeners();
+  }
+
+  void setLoading(bool value) {
+    _isLoading = value;
     notifyListeners();
   }
 

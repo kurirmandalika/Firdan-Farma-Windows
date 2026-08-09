@@ -34,7 +34,7 @@ class LaporanService {
   Future<LaporanRingkasan> getRingkasan(DateTime dari, DateTime sampai) async {
     final db = await _dbHelper.database;
     final dariStr = dari.toIso8601String().substring(0, 10);
-    final sampaiStr = sampai.toIso8601String().substring(0, 10) + 'T23:59:59';
+    final sampaiStr = '${sampai.toIso8601String().substring(0, 10)}T23:59:59';
 
     final txMaps = await db.rawQuery('''
       SELECT COUNT(*) as total_tx, COALESCE(SUM(total), 0) as sum_total, COALESCE(SUM(jumlah_item), 0) as sum_item
@@ -72,7 +72,7 @@ class LaporanService {
   }) async {
     final db = await _dbHelper.database;
     final dariStr = dari.toIso8601String().substring(0, 10);
-    final sampaiStr = sampai.toIso8601String().substring(0, 10) + 'T23:59:59';
+    final sampaiStr = '${sampai.toIso8601String().substring(0, 10)}T23:59:59';
 
     final sql = '''
       SELECT COALESCE(o.nama, '(Obat telah dihapus)') AS nama_obat,

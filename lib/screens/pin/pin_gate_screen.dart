@@ -205,7 +205,7 @@ class _PinGateScreenState extends State<PinGateScreen> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.2),
+                    color: Colors.black.withValues(alpha: 0.2),
                     blurRadius: 24,
                     offset: const Offset(0, 10),
                   ),
@@ -268,7 +268,7 @@ class _PinGateScreenState extends State<PinGateScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: AppTheme.dangerRed.withOpacity(0.1),
+                        color: AppTheme.dangerRed.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(

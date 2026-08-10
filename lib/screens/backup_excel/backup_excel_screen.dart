@@ -140,7 +140,6 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
   }
 
   Future<void> _handleImportExcel() async {
-    final messenger = ScaffoldMessenger.of(context);
     final appProv = Provider.of<AppProvider>(context, listen: false);
     final obatProv = Provider.of<ObatProvider>(context, listen: false);
 
@@ -154,18 +153,104 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
       if (mounted) {
         appProv.updateSpreadsheetPath(path);
         await obatProv.fetchObat();
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text(
-              'Berhasil mengimpor/memperbarui $count data obat dari Excel!',
+
+        // Tampilkan dialog sukses dengan opsi navigasi ke Katalog Obat
+        await showDialog(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.successGreen.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.check_circle_rounded, color: AppTheme.successGreen, size: 26),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Import Berhasil!',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
             ),
-            backgroundColor: AppTheme.successGreen,
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Berhasil mengimpor/memperbarui',
+                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.successGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.successGreen.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.medication_outlined, color: AppTheme.successGreen, size: 28),
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$count Data Obat',
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.successGreen,
+                            ),
+                          ),
+                          const Text(
+                            'berhasil dimuat dari Excel',
+                            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Ingin langsung melihat data di Katalog Obat?',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Tetap di Sini'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryTeal,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  // Navigasi ke halaman Katalog Obat (index 2)
+                  appProv.setNavIndex(2);
+                },
+                icon: const Icon(Icons.medication_outlined, size: 18),
+                label: const Text('Lihat Katalog Obat'),
+              ),
+            ],
           ),
         );
       }
     } catch (e) {
       if (mounted) {
-        messenger.showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Gagal impor Excel: ${e.toString()}'),
             backgroundColor: AppTheme.dangerRed,
@@ -399,6 +484,19 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
               onPressed: _isProcessing ? null : _handleRefreshObat,
               icon: const Icon(Icons.refresh, size: 18),
               label: const Text('Muat Ulang Data Obat'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primaryTeal,
+                side: const BorderSide(color: AppTheme.primaryTeal),
+              ),
+              onPressed: () => appProv.setNavIndex(2),
+              icon: const Icon(Icons.medication_outlined, size: 18),
+              label: const Text('Lihat Katalog Obat'),
             ),
           ),
         ],

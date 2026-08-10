@@ -37,7 +37,10 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
     } catch (e) {
       if (mounted) {
         messenger.showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}'), backgroundColor: AppTheme.dangerRed),
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: AppTheme.dangerRed,
+          ),
         );
       }
     } finally {
@@ -58,11 +61,18 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Konfirmasi Restore Database'),
-        content: const Text('Restore database akan menimpa seluruh data saat ini dengan data dari file backup. Lanjutkan?'),
+        content: const Text(
+          'Restore database akan menimpa seluruh data saat ini dengan data dari file backup. Lanjutkan?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Batal'),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.dangerRed),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.dangerRed,
+            ),
             onPressed: () => Navigator.pop(dialogContext, true),
             child: const Text('Restore Data'),
           ),
@@ -88,7 +98,10 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
     } catch (e) {
       if (mounted) {
         messenger.showSnackBar(
-          SnackBar(content: Text('Gagal restore: ${e.toString()}'), backgroundColor: AppTheme.dangerRed),
+          SnackBar(
+            content: Text('Gagal restore: ${e.toString()}'),
+            backgroundColor: AppTheme.dangerRed,
+          ),
         );
       }
     } finally {
@@ -115,7 +128,10 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
     } catch (e) {
       if (mounted) {
         messenger.showSnackBar(
-          SnackBar(content: Text('Gagal ekspor Excel: ${e.toString()}'), backgroundColor: AppTheme.dangerRed),
+          SnackBar(
+            content: Text('Gagal ekspor Excel: ${e.toString()}'),
+            backgroundColor: AppTheme.dangerRed,
+          ),
         );
       }
     } finally {
@@ -140,7 +156,9 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
         await obatProv.fetchObat();
         messenger.showSnackBar(
           SnackBar(
-            content: Text('Berhasil mengimpor/memperbarui $count data obat dari Excel!'),
+            content: Text(
+              'Berhasil mengimpor/memperbarui $count data obat dari Excel!',
+            ),
             backgroundColor: AppTheme.successGreen,
           ),
         );
@@ -148,7 +166,39 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
     } catch (e) {
       if (mounted) {
         messenger.showSnackBar(
-          SnackBar(content: Text('Gagal impor Excel: ${e.toString()}'), backgroundColor: AppTheme.dangerRed),
+          SnackBar(
+            content: Text('Gagal impor Excel: ${e.toString()}'),
+            backgroundColor: AppTheme.dangerRed,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _handleRefreshObat() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final obatProv = Provider.of<ObatProvider>(context, listen: false);
+
+    setState(() => _isProcessing = true);
+    try {
+      await obatProv.fetchObat();
+      if (mounted) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Data obat berhasil dimuat ulang.'),
+            backgroundColor: AppTheme.successGreen,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Gagal memuat ulang data obat: ${e.toString()}'),
+            backgroundColor: AppTheme.dangerRed,
+          ),
         );
       }
     } finally {
@@ -171,12 +221,19 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
                 children: [
                   const Text(
                     'Backup & Integrasi Spreadsheet',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   const Text(
                     'Kelola file cadangan database lokal (.db) dan ekspor/impor data obat ke Excel (.xlsx)',
-                    style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textSecondary,
+                    ),
                   ),
                   const SizedBox(height: 20),
 
@@ -218,11 +275,19 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
         children: [
           const Row(
             children: [
-              Icon(Icons.sd_storage_outlined, color: AppTheme.primaryTeal, size: 26),
+              Icon(
+                Icons.sd_storage_outlined,
+                color: AppTheme.primaryTeal,
+                size: 26,
+              ),
               SizedBox(width: 10),
               Text(
                 'Backup Database Lokal (.db)',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
               ),
             ],
           ),
@@ -261,11 +326,19 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
         children: [
           const Row(
             children: [
-              Icon(Icons.table_chart_outlined, color: AppTheme.emeraldGreen, size: 26),
+              Icon(
+                Icons.table_chart_outlined,
+                color: AppTheme.emeraldGreen,
+                size: 26,
+              ),
               SizedBox(width: 10),
               Text(
                 'Integrasi Spreadsheet Excel (.xlsx)',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textPrimary,
+                ),
               ),
             ],
           ),
@@ -277,12 +350,15 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
             style: TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 13,
-              color: appProv.connectedSpreadsheetPath != null ? AppTheme.emeraldGreen : AppTheme.warningOrange,
+              color: appProv.connectedSpreadsheetPath != null
+                  ? AppTheme.emeraldGreen
+                  : AppTheme.warningOrange,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            appProv.connectedSpreadsheetPath ?? 'Pilih file .xlsx untuk sinkronisasi otomatis.',
+            appProv.connectedSpreadsheetPath ??
+                'Pilih file .xlsx untuk sinkronisasi otomatis.',
             style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
@@ -291,7 +367,9 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.emeraldGreen),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.emeraldGreen,
+              ),
               onPressed: _isProcessing ? null : _handleExportExcel,
               icon: const Icon(Icons.file_download, size: 18),
               label: const Text('Ekspor Katalog Obat ke Excel (.xlsx)'),
@@ -301,10 +379,26 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(foregroundColor: AppTheme.emeraldGreen, side: const BorderSide(color: AppTheme.emeraldGreen)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.emeraldGreen,
+                side: const BorderSide(color: AppTheme.emeraldGreen),
+              ),
               onPressed: _isProcessing ? null : _handleImportExcel,
               icon: const Icon(Icons.file_upload, size: 18),
               label: const Text('Impor Data Obat dari File Excel'),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.primaryTeal,
+                side: const BorderSide(color: AppTheme.primaryTeal),
+              ),
+              onPressed: _isProcessing ? null : _handleRefreshObat,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Muat Ulang Data Obat'),
             ),
           ),
         ],

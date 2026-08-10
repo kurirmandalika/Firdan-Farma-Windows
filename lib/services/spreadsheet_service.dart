@@ -79,7 +79,10 @@ class SpreadsheetService {
       ]);
     }
 
-    final nowStr = DateTime.now().toIso8601String().replaceAll(':', '-').replaceAll('.', '-');
+    final nowStr = DateTime.now()
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .replaceAll('.', '-');
     final defaultFileName = 'FirdanFarma_DataObat_$nowStr.xlsx';
 
     final savePath = await FilePicker.platform.saveFile(
@@ -129,11 +132,14 @@ class SpreadsheetService {
 
         if (nama == null || nama.isEmpty) continue;
         if (kode == null || kode.isEmpty) {
-          kode = 'OBT-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+          kode =
+              'OBT-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
         }
 
-        double hargaBeli = double.tryParse(row[5]?.value?.toString() ?? '0') ?? 0;
-        double hargaJual = double.tryParse(row[6]?.value?.toString() ?? '0') ?? 0;
+        double hargaBeli =
+            double.tryParse(row[5]?.value?.toString() ?? '0') ?? 0;
+        double hargaJual =
+            double.tryParse(row[6]?.value?.toString() ?? '0') ?? 0;
         int stokTersedia = int.tryParse(row[7]?.value?.toString() ?? '0') ?? 0;
         int stokMinimal = int.tryParse(row[8]?.value?.toString() ?? '5') ?? 5;
         String? deskripsi = row.length > 9 ? row[9]?.value?.toString() : '';
@@ -141,28 +147,33 @@ class SpreadsheetService {
         // Check if code exists
         final existing = await _obatService.getByKode(kode);
         if (existing != null) {
-          // Update
-          await _obatService.update(existing.copyWith(
-            nama: nama,
-            hargaBeli: hargaBeli > 0 ? hargaBeli : existing.hargaBeli,
-            hargaJual: hargaJual > 0 ? hargaJual : existing.hargaJual,
-            stokTersedia: stokTersedia,
-            stokMinimal: stokMinimal,
-            deskripsi: deskripsi ?? existing.deskripsi,
-          ));
+          // Update existing obat and reactivate if it was inactive
+          await _obatService.update(
+            existing.copyWith(
+              nama: nama,
+              hargaBeli: hargaBeli > 0 ? hargaBeli : existing.hargaBeli,
+              hargaJual: hargaJual > 0 ? hargaJual : existing.hargaJual,
+              stokTersedia: stokTersedia,
+              stokMinimal: stokMinimal,
+              deskripsi: deskripsi ?? existing.deskripsi,
+              isActive: true,
+            ),
+          );
         } else {
           // Insert
-          await _obatService.insert(Obat(
-            nama: nama,
-            kodeObat: kode,
-            kategoriId: defaultKategoriId,
-            hargaBeli: hargaBeli,
-            hargaJual: hargaJual,
-            stokTersedia: stokTersedia,
-            stokMinimal: stokMinimal,
-            deskripsi: deskripsi,
-            createdAt: DateTime.now().toIso8601String(),
-          ));
+          await _obatService.insert(
+            Obat(
+              nama: nama,
+              kodeObat: kode,
+              kategoriId: defaultKategoriId,
+              hargaBeli: hargaBeli,
+              hargaJual: hargaJual,
+              stokTersedia: stokTersedia,
+              stokMinimal: stokMinimal,
+              deskripsi: deskripsi,
+              createdAt: DateTime.now().toIso8601String(),
+            ),
+          );
         }
         count++;
       }

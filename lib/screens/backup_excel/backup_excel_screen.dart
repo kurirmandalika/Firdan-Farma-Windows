@@ -227,7 +227,7 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.successGreen.withOpacity(0.15),
+                color: AppTheme.successGreen.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(Icons.check_circle_rounded, color: AppTheme.successGreen, size: 26),
@@ -354,8 +354,8 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              AppTheme.primaryTeal.withOpacity(0.15),
-                              AppTheme.emeraldGreen.withOpacity(0.1),
+                              AppTheme.primaryTeal.withValues(alpha: 0.15),
+                              AppTheme.emeraldGreen.withValues(alpha: 0.1),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(12),
@@ -472,7 +472,7 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: hasFile
-                    ? AppTheme.emeraldGreen.withOpacity(0.06)
+                    ? AppTheme.emeraldGreen.withValues(alpha: 0.06)
                     : AppTheme.bgLight,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
@@ -559,7 +559,7 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
               decoration: BoxDecoration(
                 color: AppTheme.successBg,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.successGreen.withOpacity(0.3)),
+                border: Border.all(color: AppTheme.successGreen.withValues(alpha: 0.3)),
               ),
               child: Column(
                 children: [
@@ -590,7 +590,7 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppTheme.primaryTealLight.withOpacity(0.5),
+              color: AppTheme.primaryTealLight.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Column(
@@ -667,12 +667,12 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     colors: [
-                      AppTheme.primaryTeal.withOpacity(0.08),
-                      AppTheme.emeraldGreen.withOpacity(0.06),
+                      AppTheme.primaryTeal.withValues(alpha: 0.08),
+                      AppTheme.emeraldGreen.withValues(alpha: 0.06),
                     ],
                   ),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.primaryTeal.withOpacity(0.2)),
+                  border: Border.all(color: AppTheme.primaryTeal.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
@@ -726,7 +726,7 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
                   decoration: BoxDecoration(
                     color: AppTheme.successBg,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.successGreen.withOpacity(0.3)),
+                    border: Border.all(color: AppTheme.successGreen.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     children: [
@@ -881,7 +881,7 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
             decoration: BoxDecoration(
               color: AppTheme.warningBg,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.warningOrange.withOpacity(0.3)),
+              border: Border.all(color: AppTheme.warningOrange.withValues(alpha: 0.3)),
             ),
             child: const Row(
               children: [
@@ -913,7 +913,7 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
         border: Border.all(color: AppTheme.borderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -936,7 +936,7 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, color: color, size: 22),

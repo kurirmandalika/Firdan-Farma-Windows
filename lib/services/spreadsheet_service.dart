@@ -8,6 +8,148 @@ import '../services/obat_service.dart';
 import '../services/kategori_service.dart';
 import '../utils/app_constants.dart';
 
+String _normalizeHeaderValue(String value) {
+  return value
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
+      .trim();
+}
+
+bool _looksLikeHeaderRow(List<String> values) {
+  if (values.isEmpty) return false;
+
+  final nonEmptyValues = values.where((value) => value.trim().isNotEmpty).toList();
+  if (nonEmptyValues.length < 2) return false;
+
+  final joined = nonEmptyValues.join(' ').trim();
+  if (joined.isEmpty) return false;
+
+  final normalized = _normalizeHeaderValue(joined);
+  final keywordHits = <String>[
+    'kode',
+    'nama',
+    'harga',
+    'stok',
+    'deskripsi',
+    'keterangan',
+    'catatan',
+    'barang',
+    'produk',
+    'beli',
+    'jual',
+    'min',
+    'minimal',
+  ].where((keyword) => normalized.contains(keyword)).length;
+
+  return keywordHits >= 2;
+}
+
+Map<String, int> detectColumnMapping(
+  Iterable<Iterable<dynamic>> rows, {
+  bool fallbackToFirstRow = false,
+}) {
+  final rowList = rows.toList();
+  if (rowList.isEmpty) return {};
+
+  int headerIndex = -1;
+  for (int index = 0; index < rowList.length; index++) {
+    final row = rowList[index].toList();
+    if (row.every((cell) => _stringifyCell(cell).isEmpty)) {
+      continue;
+    }
+
+    final normalizedValues = row
+        .map((cell) => _normalizeHeaderValue(_stringifyCell(cell)))
+        .toList();
+
+    if (_looksLikeHeaderRow(normalizedValues)) {
+      headerIndex = index;
+      break;
+    }
+  }
+
+  if (headerIndex >= 0) {
+    final headerRow = rowList[headerIndex].toList();
+    final mapping = <String, int>{};
+
+    for (int colIndex = 0; colIndex < headerRow.length; colIndex++) {
+      final header = _normalizeHeaderValue(_stringifyCell(headerRow[colIndex]));
+      if (header.isEmpty) continue;
+
+      if (header.contains('kode') || header.contains('code')) {
+        mapping['kode'] = colIndex;
+      } else if (header.contains('nama') || header.contains('barang') || header.contains('produk')) {
+        mapping['nama'] = colIndex;
+      } else if (header.contains('harga beli') || header.contains('purchase') || header.contains('beli')) {
+        mapping['hargaBeli'] = colIndex;
+      } else if (header.contains('harga jual') || header.contains('selling') || header.contains('jual')) {
+        mapping['hargaJual'] = colIndex;
+      } else if (header.contains('stok') || header.contains('qty') || header.contains('quantity') || header.contains('jumlah')) {
+        if (!mapping.containsKey('stok') && !header.contains('minimal')) {
+          mapping['stok'] = colIndex;
+        } else if (header.contains('minimal') || header.contains('min')) {
+          mapping['stokMinimal'] = colIndex;
+        }
+      } else if (header.contains('deskripsi') || header.contains('keterangan') || header.contains('catatan') || header.contains('ket')) {
+        mapping['deskripsi'] = colIndex;
+      }
+    }
+
+    if (!mapping.containsKey('stokMinimal')) {
+      mapping['stokMinimal'] = mapping['stok'] ?? 8;
+    }
+
+    return mapping;
+  }
+
+  if (fallbackToFirstRow) {
+    final firstNonEmptyIndex = rowList.indexWhere(
+      (row) => row.any((cell) => _stringifyCell(cell).isNotEmpty),
+    );
+
+    if (firstNonEmptyIndex >= 0) {
+      return {
+        'kode': 0,
+        'nama': 1,
+        'hargaBeli': 2,
+        'hargaJual': 3,
+        'stok': 4,
+        'stokMinimal': 5,
+        'deskripsi': 6,
+      };
+    }
+  }
+
+  return {};
+}
+
+int findHeaderRowIndex(Iterable<Iterable<dynamic>> rows) {
+  final rowList = rows.toList();
+  for (int index = 0; index < rowList.length; index++) {
+    final row = rowList[index].toList();
+    if (row.every((cell) => _stringifyCell(cell).isEmpty)) continue;
+
+    final normalizedValues = row
+        .map((cell) => _normalizeHeaderValue(_stringifyCell(cell)))
+        .toList();
+
+    if (_looksLikeHeaderRow(normalizedValues)) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+String _stringifyCell(dynamic cell) {
+  if (cell == null) return '';
+  if (cell is String) return cell.trim();
+  if (cell is num) return cell.toString();
+  if (cell is bool) return cell.toString();
+  if (cell is DateTime) return cell.toIso8601String();
+  return cell.toString().trim();
+}
+
 /// Hasil detail dari proses import Excel
 class ImportResult {
   final int inserted;
@@ -221,47 +363,32 @@ class SpreadsheetService {
         var sheet = excel.tables[tableName];
         if (sheet == null || sheet.rows.isEmpty) continue;
 
-        // ── Deteksi header secara dinamis ──
-        final Map<String, int> headerMap = {};
-        final headerRow = sheet.rows.first;
-
-        for (int ci = 0; ci < headerRow.length; ci++) {
-          final cellVal = _cellToString(headerRow[ci]);
-          if (cellVal.isEmpty) continue;
-          headerMap[cellVal.toLowerCase().trim()] = ci;
-        }
-
+        final headerMap = detectColumnMapping(sheet.rows, fallbackToFirstRow: true);
         debugPrint('[SpreadsheetService] Header ditemukan: $headerMap');
 
-        // Tentukan indeks kolom berdasarkan nama header (atau fallback ke posisi)
-        final int? idxKode   = _findCol(headerMap, ['kode obat', 'kode', 'code']);
-        final int? idxNama   = _findCol(headerMap, ['nama obat', 'nama', 'name']);
-        final int? idxHBeli  = _findCol(headerMap, ['harga beli', 'hargabeli', 'purchase price', 'buy price']);
-        final int? idxHJual  = _findCol(headerMap, ['harga jual', 'hargajual', 'selling price', 'sell price', 'harga']);
-        final int? idxStok   = _findCol(headerMap, ['stok tersedia', 'stok', 'stock', 'qty', 'quantity', 'jumlah']);
-        final int? idxMinStr = _findCol(headerMap, ['stok minimal', 'stok minimum', 'minimum stock', 'min stock', 'minimal']);
-        final int? idxDesk   = _findCol(headerMap, ['deskripsi', 'description', 'keterangan', 'catatan']);
+        final int? idxKode = headerMap['kode'];
+        final int? idxNama = headerMap['nama'];
+        final int? idxHBeli = headerMap['hargaBeli'];
+        final int? idxHJual = headerMap['hargaJual'];
+        final int? idxStok = headerMap['stok'];
+        final int? idxMinStr = headerMap['stokMinimal'];
+        final int? idxDesk = headerMap['deskripsi'];
 
-        // Fallback ke posisi fix jika header tidak dikenali
-        final int colKode   = idxKode   ?? 1;
-        final int colNama   = idxNama   ?? 2;
-        final int colHBeli  = idxHBeli  ?? 5;
-        final int colHJual  = idxHJual  ?? 6;
-        final int colStok   = idxStok   ?? 7;
-        final int colMinStr = idxMinStr ?? 8;
-        final int colDesk   = idxDesk   ?? 9;
+        final int colKode = idxKode ?? 0;
+        final int colNama = idxNama ?? 1;
+        final int colHBeli = idxHBeli ?? 2;
+        final int colHJual = idxHJual ?? 3;
+        final int colStok = idxStok ?? 4;
+        final int colMinStr = idxMinStr ?? 5;
+        final int colDesk = idxDesk ?? 6;
 
         debugPrint('[SpreadsheetService] Mapping kolom => Kode:$colKode, Nama:$colNama, HargaBeli:$colHBeli, HargaJual:$colHJual, Stok:$colStok');
 
-        // Iterasi baris data (lewati baris header pertama)
-        bool isFirstRow = true;
+        final startRowIndex = findHeaderRowIndex(sheet.rows) + 1;
         int rowNum = 0;
-        for (var row in sheet.rows) {
+        for (int rowIndex = startRowIndex; rowIndex < sheet.rows.length; rowIndex++) {
+          final row = sheet.rows[rowIndex];
           rowNum++;
-          if (isFirstRow) {
-            isFirstRow = false;
-            continue;
-          }
 
           // Baris kosong total → lewati
           if (row.every((c) => _cellToString(c).isEmpty)) {
@@ -351,50 +478,47 @@ class SpreadsheetService {
   /// Konversi cell Excel ke String, menangani semua tipe CellValue.
   /// Catatan: di excel ^4.x, TextCellValue.value bertipe TextSpan,
   /// sehingga kita pakai toString() yang universal untuk semua tipe.
-  String _cellToString(Data? cell) {
+  String _cellToString(dynamic cell) {
     if (cell == null) return '';
-    final v = cell.value;
-    if (v == null) return '';
-    if (v is IntCellValue) return v.value.toString();
-    if (v is DoubleCellValue) return v.value.toString();
-    if (v is BoolCellValue) return v.value.toString();
-    // TextCellValue.value di excel ^4.x adalah TextSpan — gunakan toString()
-    // yang akan memanggil TextSpan.toPlainText() atau representasi string-nya
-    return v.toString().trim();
+
+    if (cell is Data) {
+      final v = cell.value;
+      if (v == null) return '';
+      if (v is IntCellValue) return v.value.toString();
+      if (v is DoubleCellValue) return v.value.toString();
+      if (v is BoolCellValue) return v.value.toString();
+      return v.toString().trim();
+    }
+
+    if (cell is String) return cell.trim();
+    if (cell is num) return cell.toString();
+    if (cell is bool) return cell.toString();
+    if (cell is DateTime) return cell.toIso8601String();
+    return cell.toString().trim();
   }
 
   /// Ambil nilai string dari kolom tertentu pada sebuah baris, aman jika kolom tidak ada.
-  String _safeCellAt(List<Data?> row, int colIndex) {
+  String _safeCellAt(List<dynamic> row, int colIndex) {
     if (colIndex < 0 || colIndex >= row.length) return '';
     return _cellToString(row[colIndex]);
   }
 
   /// Parse double dari kolom tertentu, aman terhadap format apapun.
-  double _safeDouble(List<Data?> row, int colIndex, {double defaultVal = 0}) {
+  double _safeDouble(List<dynamic> row, int colIndex, {double defaultVal = 0}) {
     final raw = _safeCellAt(row, colIndex);
     if (raw.isEmpty) return defaultVal;
-    // Ganti koma dengan titik (format Indonesia: 1.000,00 → 1000.00)
     final cleaned = raw.replaceAll('.', '').replaceAll(',', '.').trim();
     return double.tryParse(cleaned) ?? double.tryParse(raw) ?? defaultVal;
   }
 
   /// Parse int dari kolom tertentu, aman terhadap format apapun.
-  int _safeInt(List<Data?> row, int colIndex, {int defaultVal = 0}) {
+  int _safeInt(List<dynamic> row, int colIndex, {int defaultVal = 0}) {
     final raw = _safeCellAt(row, colIndex);
     if (raw.isEmpty) return defaultVal;
     final cleaned = raw.replaceAll('.', '').replaceAll(',', '').trim();
-    // Coba parse sebagai int, atau truncate dari double
     return int.tryParse(cleaned) ??
         double.tryParse(cleaned)?.toInt() ??
         int.tryParse(raw.split('.').first) ??
         defaultVal;
-  }
-
-  /// Cari indeks kolom dari map header berdasarkan daftar nama yang mungkin.
-  int? _findCol(Map<String, int> headerMap, List<String> possibleNames) {
-    for (final name in possibleNames) {
-      if (headerMap.containsKey(name)) return headerMap[name];
-    }
-    return null;
   }
 }

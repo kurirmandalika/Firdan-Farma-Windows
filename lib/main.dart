@@ -2,25 +2,24 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:intl/date_symbol_data_local.dart';
 
-import 'theme/app_theme.dart';
-import 'utils/app_constants.dart';
-import 'database/database_helper.dart';
+import 'package:firdan_farma_windows/core/theme/app_theme.dart';
+import 'package:firdan_farma_windows/core/constants/app_constants.dart';
 
-import 'providers/app_provider.dart';
-import 'providers/obat_provider.dart';
-import 'providers/kategori_provider.dart';
-import 'providers/supplier_provider.dart';
-import 'providers/stok_provider.dart';
-import 'providers/transaksi_provider.dart';
-import 'providers/laporan_provider.dart';
-import 'providers/pin_provider.dart';
+import 'package:firdan_farma_windows/application/providers/app_provider.dart';
+import 'package:firdan_farma_windows/application/providers/obat_provider.dart';
+import 'package:firdan_farma_windows/application/providers/kategori_provider.dart';
+import 'package:firdan_farma_windows/application/providers/supplier_provider.dart';
+import 'package:firdan_farma_windows/application/providers/stok_provider.dart';
+import 'package:firdan_farma_windows/application/providers/transaksi_provider.dart';
+import 'package:firdan_farma_windows/application/providers/laporan_provider.dart';
+import 'package:firdan_farma_windows/application/providers/pin_provider.dart';
 
-import 'screens/pin/pin_gate_screen.dart';
-import 'screens/main_desktop_shell.dart';
+import 'package:firdan_farma_windows/features/pin/presentation/pin_gate_screen.dart';
+import 'package:firdan_farma_windows/features/shell/presentation/main_desktop_shell.dart';
+import 'package:firdan_farma_windows/features/startup/presentation/startup_splash_screen.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize SQLite for Desktop (Windows / Linux / macOS)
@@ -28,12 +27,6 @@ Future<void> main() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
-
-  // Initialize Date Formatting Locale
-  await initializeDateFormatting('id_ID', null);
-
-  // Pre-warm database connection
-  await DatabaseHelper.instance.database;
 
   runApp(const FirdanFarmaApp());
 }
@@ -54,13 +47,23 @@ class FirdanFarmaApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => LaporanProvider()),
         ChangeNotifierProvider(create: (_) => PinProvider()),
       ],
-      child: MaterialApp(
-        title: AppConstants.appName,
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        home: const PinGateScreen(
-          child: MainDesktopShell(),
-        ),
+      child: Consumer<AppProvider>(
+        builder: (context, appProvider, _) {
+          AppTheme.setBrightness(
+            appProvider.isDarkMode ? Brightness.dark : Brightness.light,
+          );
+
+          return MaterialApp(
+            title: AppConstants.appName,
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: appProvider.themeMode,
+            home: const StartupSplashScreen(
+              child: PinGateScreen(child: MainDesktopShell()),
+            ),
+          );
+        },
       ),
     );
   }

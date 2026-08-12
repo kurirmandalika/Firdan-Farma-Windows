@@ -165,6 +165,57 @@ class _ObatListScreenState extends State<ObatListScreen> {
                 icon: const Icon(Icons.add),
                 label: const Text('Tambah Obat'),
               ),
+              const SizedBox(width: 8),
+              PopupMenuButton<String>(
+                tooltip: 'Tindakan',
+                onSelected: (val) async {
+                  if (val == 'clear') {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (dialogCtx) => AlertDialog(
+                        title: const Text('Kosongkan Katalog Obat'),
+                        content: const Text(
+                            'Semua obat aktif akan dinonaktifkan. Histori transaksi dan stok akan tetap dipertahankan. Lanjutkan?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogCtx).pop(false),
+                            child: const Text('Batal'),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.dangerRed,
+                            ),
+                            onPressed: () => Navigator.of(dialogCtx).pop(true),
+                            child: const Text('Kosongkan'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (confirmed == true) {
+                      final obatProv = Provider.of<ObatProvider>(context, listen: false);
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        await obatProv.clearAllObat();
+                        messenger.showSnackBar(
+                          const SnackBar(content: Text('Katalog obat dikosongkan (obat dinonaktifkan).')),
+                        );
+                      } catch (e) {
+                        messenger.showSnackBar(
+                          SnackBar(content: Text('Gagal mengosongkan katalog: $e'), backgroundColor: AppTheme.dangerRed),
+                        );
+                      }
+                    }
+                  }
+                },
+                itemBuilder: (ctx) => [
+                  const PopupMenuItem<String>(
+                    value: 'clear',
+                    child: Text('Kosongkan Katalog Obat'),
+                  ),
+                ],
+                icon: const Icon(Icons.more_vert),
+              ),
             ],
           ),
           const SizedBox(height: 18),
@@ -279,10 +330,25 @@ class _ObatListScreenState extends State<ObatListScreen> {
                   }
 
                   if (obatProv.obatList.isEmpty) {
-                    return const EmptyState(
+                    final hasFilter =
+                        obatProv.searchQuery.trim().isNotEmpty ||
+                        obatProv.selectedKategoriId != null ||
+                        obatProv.showInactive;
+                    return EmptyState(
                       icon: Icons.medication_liquid_outlined,
-                      title: 'Data obat belum ditemukan',
-                      subtitle: 'Tambah obat baru atau ubah filter pencarian.',
+                      title: hasFilter
+                          ? 'Obat tidak ditemukan'
+                          : 'Belum ada obat',
+                      subtitle: hasFilter
+                          ? 'Ubah kata pencarian atau filter katalog.'
+                          : 'Tambahkan obat pertama untuk mulai mencatat stok dan penjualan.',
+                      action: hasFilter
+                          ? null
+                          : ElevatedButton.icon(
+                              onPressed: () => _showObatDialog(),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Tambah Obat'),
+                            ),
                     );
                   }
 
@@ -353,6 +419,7 @@ class _ObatListScreenState extends State<ObatListScreen> {
 
         return DropdownButtonFormField<int?>(
           initialValue: validValue,
+          isExpanded: true,
           decoration: const InputDecoration(
             hintText: 'Semua Kategori',
             contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -363,7 +430,14 @@ class _ObatListScreenState extends State<ObatListScreen> {
               child: Text('Semua Kategori'),
             ),
             ...katProv.kategoriList.map(
-              (k) => DropdownMenuItem<int?>(value: k.id, child: Text(k.nama)),
+              (k) => DropdownMenuItem<int?>(
+                value: k.id,
+                child: Text(
+                  k.nama,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
             ),
           ],
           onChanged: (val) {
@@ -415,12 +489,13 @@ class _ObatListHeader extends StatelessWidget {
       ),
       child: const Row(
         children: [
-          SizedBox(width: 112, child: _HeaderLabel('Kode')),
+          SizedBox(width: 104, child: _HeaderLabel('Kode')),
           Expanded(flex: 3, child: _HeaderLabel('Nama Obat')),
-          Expanded(flex: 2, child: _HeaderLabel('Kategori')),
-          Expanded(flex: 2, child: _HeaderLabel('Supplier')),
-          SizedBox(width: 120, child: _HeaderLabel('Harga Jual')),
-          SizedBox(width: 124, child: _HeaderLabel('Stok')),
+          SizedBox(width: 80, child: _HeaderLabel('Satuan')),
+          SizedBox(width: 112, child: _HeaderLabel('HB')),
+          SizedBox(width: 112, child: _HeaderLabel('HJ')),
+          SizedBox(width: 112, child: _HeaderLabel('Stok')),
+          SizedBox(width: 90, child: _HeaderLabel('Status')),
           SizedBox(width: 96, child: _HeaderLabel('Aksi')),
         ],
       ),
@@ -483,7 +558,7 @@ class _ObatListRow extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 112,
+            width: 104,
             child: Text(
               obat.kodeObat,
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
@@ -492,22 +567,20 @@ class _ObatListRow extends StatelessWidget {
             ),
           ),
           Expanded(flex: 3, child: _MedicineName(obat: obat)),
-          Expanded(flex: 2, child: _TextCell(obat.namaKategori ?? '-')),
-          Expanded(flex: 2, child: _TextCell(obat.namaSupplier ?? '-')),
+          SizedBox(width: 80, child: _TextCell(obat.satuan)),
           SizedBox(
-            width: 120,
-            child: Text(
-              currencyFormatter.format(obat.hargaJual),
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: AppTheme.primaryTeal,
-                fontSize: 13,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+            width: 112,
+            child: _PriceCell(text: currencyFormatter.format(obat.hargaBeli)),
+          ),
+          SizedBox(
+            width: 112,
+            child: _PriceCell(
+              text: currencyFormatter.format(obat.hargaJual),
+              emphasized: true,
             ),
           ),
-          SizedBox(width: 124, child: _StockBadge(obat: obat)),
+          SizedBox(width: 112, child: _StockBadge(obat: obat)),
+          SizedBox(width: 90, child: _StatusBadge(obat: obat)),
           SizedBox(
             width: 96,
             child: _ActionButtons(
@@ -546,14 +619,7 @@ class _ObatListRow extends StatelessWidget {
             runSpacing: 6,
             children: [
               _MetaChip(icon: Icons.qr_code_2, label: obat.kodeObat),
-              _MetaChip(
-                icon: Icons.category_outlined,
-                label: obat.namaKategori ?? '-',
-              ),
-              _MetaChip(
-                icon: Icons.local_shipping_outlined,
-                label: obat.namaSupplier ?? '-',
-              ),
+              _MetaChip(icon: Icons.inventory_2_outlined, label: obat.satuan),
             ],
           ),
           const SizedBox(height: 10),
@@ -561,13 +627,18 @@ class _ObatListRow extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  currencyFormatter.format(obat.hargaJual),
+                  'HB ${currencyFormatter.format(obat.hargaBeli)}  |  HJ ${currencyFormatter.format(obat.hargaJual)}',
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     color: AppTheme.primaryTeal,
+                    fontSize: 12,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              _StatusBadge(obat: obat),
+              const SizedBox(width: 6),
               _ActionButtons(
                 obat: obat,
                 onEdit: onEdit,
@@ -604,15 +675,13 @@ class _MedicineName extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        if (obat.deskripsi != null && obat.deskripsi!.isNotEmpty) ...[
-          const SizedBox(height: 2),
-          Text(
-            obat.deskripsi!,
-            style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+        const SizedBox(height: 2),
+        Text(
+          '${obat.satuan}${obat.deskripsi != null && obat.deskripsi!.isNotEmpty ? ' | ${obat.deskripsi}' : ''}',
+          style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
       ],
     );
   }
@@ -634,6 +703,40 @@ class _TextCell extends StatelessWidget {
   }
 }
 
+class _PriceCell extends StatelessWidget {
+  final String text;
+  final bool emphasized;
+
+  const _PriceCell({required this.text, this.emphasized = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: TextStyle(
+        fontWeight: emphasized ? FontWeight.w800 : FontWeight.w600,
+        color: emphasized ? AppTheme.primaryTeal : AppTheme.textSecondary,
+        fontSize: 12,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  final Obat obat;
+
+  const _StatusBadge({required this.obat});
+
+  @override
+  Widget build(BuildContext context) {
+    return obat.isActive
+        ? CustomBadge.success('Aktif')
+        : CustomBadge.warning('Nonaktif');
+  }
+}
+
 class _StockBadge extends StatelessWidget {
   final Obat obat;
 
@@ -641,7 +744,6 @@ class _StockBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!obat.isActive) return CustomBadge.warning('Nonaktif');
     if (obat.isHabis) return CustomBadge.danger('Habis');
     if (obat.isStokMenipis) {
       return CustomBadge.warning('${obat.stokTersedia} unit');
@@ -764,6 +866,7 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
 
   late TextEditingController _kodeController;
   late TextEditingController _namaController;
+  late TextEditingController _satuanController;
   late TextEditingController _hargaBeliController;
   late TextEditingController _hargaJualController;
   late TextEditingController _stokTersediaController;
@@ -777,12 +880,9 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
   void initState() {
     super.initState();
     final o = widget.obat;
-    _kodeController = TextEditingController(
-      text:
-          o?.kodeObat ??
-          'OBT-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
-    );
+    _kodeController = TextEditingController(text: o?.kodeObat ?? '');
     _namaController = TextEditingController(text: o?.nama ?? '');
+    _satuanController = TextEditingController(text: o?.satuan ?? 'PCS');
     _hargaBeliController = TextEditingController(
       text: o != null ? o.hargaBeli.toStringAsFixed(0) : '',
     );
@@ -813,6 +913,7 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
   void dispose() {
     _kodeController.dispose();
     _namaController.dispose();
+    _satuanController.dispose();
     _hargaBeliController.dispose();
     _hargaJualController.dispose();
     _stokTersediaController.dispose();
@@ -834,6 +935,7 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
       final hargaJual = double.tryParse(_hargaJualController.text.trim());
       final stokTersedia = int.tryParse(_stokTersediaController.text.trim());
       final stokMinimal = int.tryParse(_stokMinimalController.text.trim());
+      final satuan = _satuanController.text.trim().toUpperCase();
 
       if (hargaBeli == null ||
           hargaJual == null ||
@@ -850,22 +952,73 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
         return;
       }
 
+      if (hargaBeli < 0 ||
+          hargaJual < 0 ||
+          stokTersedia < 0 ||
+          stokMinimal < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Harga dan stok tidak boleh kurang dari 0.'),
+            backgroundColor: AppTheme.dangerRed,
+          ),
+        );
+        return;
+      }
+
+      if (satuan.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Satuan obat wajib diisi.'),
+            backgroundColor: AppTheme.dangerRed,
+          ),
+        );
+        return;
+      }
+
       final obatProv = Provider.of<ObatProvider>(context, listen: false);
+      final navigator = Navigator.of(context);
+
+      if (hargaJual < hargaBeli) {
+        final lanjut = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Harga jual di bawah harga beli'),
+            content: const Text(
+              'Harga jual lebih rendah dari harga beli. Lanjutkan menyimpan data obat?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Batal'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Lanjutkan'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        if (lanjut != true) return;
+      }
+
       final newObat = Obat(
         id: widget.obat?.id,
         nama: _namaController.text.trim(),
         kodeObat: _kodeController.text.trim(),
+        satuan: satuan,
         kategoriId: _selectedKategoriId!,
         supplierId: _selectedSupplierId,
         hargaBeli: hargaBeli,
         hargaJual: hargaJual,
-        stokTersedia: stokTersedia,
+        stokTersedia: widget.obat == null
+            ? stokTersedia
+            : widget.obat!.stokTersedia,
         stokMinimal: stokMinimal,
         deskripsi: _deskripsiController.text.trim(),
         createdAt: widget.obat?.createdAt ?? DateTime.now().toIso8601String(),
       );
 
-      final navigator = Navigator.of(context);
       if (widget.obat == null) {
         await obatProv.addObat(newObat);
       } else {
@@ -924,73 +1077,36 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
                   ],
                 ),
                 const Divider(height: 20),
+                TextFormField(
+                  controller: _namaController,
+                  decoration: const InputDecoration(labelText: 'Nama Obat *'),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Wajib diisi' : null,
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
                       child: TextFormField(
                         controller: _kodeController,
                         decoration: const InputDecoration(
-                          labelText: 'Kode Obat *',
+                          labelText: 'Kode Obat',
+                          hintText: 'Otomatis jika kosong',
                         ),
-                        validator: (v) =>
-                            v == null || v.isEmpty ? 'Wajib diisi' : null,
                       ),
                     ),
                     const SizedBox(width: 14),
                     Expanded(
                       child: TextFormField(
-                        controller: _namaController,
+                        controller: _satuanController,
+                        textCapitalization: TextCapitalization.characters,
                         decoration: const InputDecoration(
-                          labelText: 'Nama Obat *',
+                          labelText: 'Satuan *',
+                          hintText: 'STRIP, BOX, BOTOL',
                         ),
-                        validator: (v) =>
-                            v == null || v.isEmpty ? 'Wajib diisi' : null,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<int?>(
-                        initialValue: validKategoriValue,
-                        decoration: const InputDecoration(
-                          labelText: 'Kategori *',
-                        ),
-                        items: katList
-                            .map(
-                              (k) => DropdownMenuItem<int?>(
-                                value: k.id,
-                                child: Text(k.nama),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (val) =>
-                            setState(() => _selectedKategoriId = val),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: DropdownButtonFormField<int?>(
-                        initialValue: validSupplierValue,
-                        decoration: const InputDecoration(
-                          labelText: 'Supplier',
-                        ),
-                        items: [
-                          const DropdownMenuItem<int?>(
-                            value: null,
-                            child: Text('- Tanpa Supplier -'),
-                          ),
-                          ...supList.map(
-                            (s) => DropdownMenuItem<int?>(
-                              value: s.id,
-                              child: Text(s.nama),
-                            ),
-                          ),
-                        ],
-                        onChanged: (val) =>
-                            setState(() => _selectedSupplierId = val),
+                        validator: (v) => v == null || v.trim().isEmpty
+                            ? 'Wajib diisi'
+                            : null,
                       ),
                     ),
                   ],
@@ -1030,9 +1146,15 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
                       child: TextFormField(
                         controller: _stokTersediaController,
                         keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Stok Tersedia *',
+                        decoration: InputDecoration(
+                          labelText: widget.obat == null
+                              ? 'Stok Awal *'
+                              : 'Stok Sekarang',
+                          helperText: widget.obat == null
+                              ? 'Dicatat sebagai SALDO_AWAL'
+                              : 'Ubah stok lewat menu Stok/Pembelian',
                         ),
+                        enabled: widget.obat == null,
                         validator: (v) =>
                             v == null || v.isEmpty ? 'Wajib diisi' : null,
                       ),
@@ -1047,6 +1169,62 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
                         ),
                         validator: (v) =>
                             v == null || v.isEmpty ? 'Wajib diisi' : null,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<int?>(
+                        initialValue: validKategoriValue,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Kategori *',
+                        ),
+                        items: katList
+                            .map(
+                              (k) => DropdownMenuItem<int?>(
+                                value: k.id,
+                                child: Text(
+                                  k.nama,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (val) =>
+                            setState(() => _selectedKategoriId = val),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: DropdownButtonFormField<int?>(
+                        initialValue: validSupplierValue,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Supplier (opsional)',
+                        ),
+                        items: [
+                          const DropdownMenuItem<int?>(
+                            value: null,
+                            child: Text('- Tanpa Supplier -'),
+                          ),
+                          ...supList.map(
+                            (s) => DropdownMenuItem<int?>(
+                              value: s.id,
+                              child: Text(
+                                s.nama,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ),
+                        ],
+                        onChanged: (val) =>
+                            setState(() => _selectedSupplierId = val),
                       ),
                     ),
                   ],

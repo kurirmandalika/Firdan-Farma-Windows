@@ -137,6 +137,20 @@ class ObatProvider extends ChangeNotifier {
     }
   }
 
+  /// Archive (soft-delete) all active medicines so the catalog appears empty.
+  /// This uses the existing service.archiveExceptCodes with an empty set which
+  /// marks all active obat rows as inactive while preserving transaction/stock history.
+  Future<bool> clearAllObat() async {
+    try {
+      await _service.archiveExceptCodes(<String>{});
+      await fetchObat();
+      return true;
+    } catch (e) {
+      debugPrint('Error clearAllObat: $e');
+      rethrow;
+    }
+  }
+
   @override
   void dispose() {
     _searchDebounce?.cancel();

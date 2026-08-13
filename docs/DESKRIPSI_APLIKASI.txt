@@ -1,0 +1,617 @@
+DESKRIPSI LENGKAP APLIKASI
+APOTEK FIRDAN FARMA
+
+Tanggal dokumen: 12 Agustus 2026
+
+============================================================
+1. IDENTITAS APLIKASI
+============================================================
+
+Nama aplikasi:
+Apotek Firdan Farma
+
+Subtitle aplikasi:
+Sistem Manajemen & Kasir Apotek Windows
+
+Versi:
+1.1 (Windows Desktop)
+
+Jenis aplikasi:
+Aplikasi desktop untuk operasional apotek, terutama manajemen data obat,
+stok, transaksi kasir, laporan penjualan, serta backup dan impor/ekspor data.
+
+Platform utama:
+Windows Desktop.
+
+Mode kerja:
+Local-first/offline. Data utama aplikasi disimpan di database lokal SQLite
+dengan nama file firdan_farma.db. Aplikasi tetap dapat digunakan tanpa koneksi
+internet karena proses kasir, stok, katalog, laporan, PIN, dan backup berjalan
+di komputer pengguna.
+
+Target pengguna:
+- Pemilik apotek.
+- Admin apotek.
+- Kasir utama.
+- Petugas stok/gudang.
+
+Tujuan utama:
+Membantu apotek menjalankan operasional harian secara lebih tertata, cepat,
+dan mudah diaudit, mulai dari pencatatan produk obat, transaksi penjualan,
+pengurangan stok otomatis, pantauan stok menipis, sampai pembuatan laporan
+penjualan.
+
+
+============================================================
+2. RINGKASAN APLIKASI
+============================================================
+
+Apotek Firdan Farma adalah aplikasi desktop berbasis Flutter yang dibuat untuk
+mengelola proses bisnis apotek dalam satu sistem terpadu. Aplikasi ini
+menggabungkan beberapa kebutuhan utama apotek, yaitu katalog obat, transaksi
+kasir, manajemen stok, master kategori dan supplier, laporan penjualan, impor
+dan ekspor Excel, backup database, serta pengamanan akses menggunakan PIN.
+
+Aplikasi ini dirancang untuk dipakai di komputer kasir atau komputer admin.
+Antarmukanya menggunakan gaya dashboard modern dengan sidebar navigasi,
+topbar status, kartu statistik, mode terang/gelap, serta layout responsif agar
+tetap nyaman di ukuran layar desktop maupun layar yang lebih kecil.
+
+Saat aplikasi dibuka, pengguna melihat layar startup modern bertipe click
+screen. Layar ini menyiapkan database dan format tanggal lokal Indonesia.
+Setelah sistem siap, pengguna dapat klik layar untuk masuk ke alur utama
+aplikasi. Jika PIN sudah diatur, aplikasi akan meminta PIN terlebih dahulu.
+Jika belum ada PIN, aplikasi dapat langsung membuka halaman utama.
+
+
+============================================================
+3. TEKNOLOGI DAN ARSITEKTUR
+============================================================
+
+Aplikasi dibangun menggunakan:
+- Flutter sebagai framework utama antarmuka desktop.
+- Material 3 untuk komponen UI modern.
+- Provider dan ChangeNotifier untuk state management.
+- SQLite melalui sqflite_common_ffi untuk database lokal desktop.
+- shared_preferences untuk menyimpan preferensi ringan, seperti mode tema,
+  PIN, percobaan PIN, dan waktu lockout.
+- file_picker untuk memilih lokasi file impor/ekspor/backup.
+- excel untuk membaca dan menulis file .xlsx.
+- intl untuk format tanggal, waktu, dan mata uang Indonesia.
+- crypto untuk hashing PIN menggunakan SHA-256.
+- pdf dan printing untuk membuat dan mencetak struk transaksi.
+
+Struktur aplikasi dipisahkan ke beberapa lapisan:
+- core: konstanta, tema, dan helper responsif.
+- data: model, database helper, dan service akses data.
+- application: provider untuk state aplikasi.
+- features: halaman fitur seperti dashboard, kasir, obat, stok, master,
+  laporan, data Excel, PIN, startup, dan shell utama.
+- shared: widget bersama seperti kartu, logo, dialog struk, badge, dan layout
+  halaman.
+
+
+============================================================
+4. ALUR MASUK APLIKASI
+============================================================
+
+Alur startup:
+1. Aplikasi dijalankan dari main.dart.
+2. Flutter memastikan binding siap.
+3. Database factory desktop disiapkan.
+4. Aplikasi membuka StartupSplashScreen.
+5. StartupSplashScreen menjalankan bootstrap:
+   - inisialisasi format tanggal lokal Indonesia id_ID;
+   - membuka atau membuat database lokal;
+   - menunggu durasi minimum splash agar transisi terasa halus.
+6. Jika bootstrap berhasil, layar menampilkan status siap.
+7. Pengguna klik layar untuk masuk.
+8. Aplikasi melanjutkan ke PinGateScreen.
+9. Jika PIN valid atau belum ada PIN, aplikasi membuka MainDesktopShell.
+
+Layar startup saat ini:
+- Menggunakan tema modern click screen.
+- Menampilkan identitas Apotek Firdan Farma.
+- Menampilkan status inisialisasi.
+- Menampilkan fitur ringkas seperti Kasir, Stok, dan Laporan.
+- Menggunakan latar visual daun dan garis geometris halus.
+- Saat siap, petunjuk berubah menjadi "Klik layar untuk masuk".
+- Saat error startup, pengguna dapat klik layar untuk mencoba ulang.
+
+
+============================================================
+5. KEAMANAN DAN PIN
+============================================================
+
+Aplikasi memiliki fitur pengamanan akses dengan PIN 6 digit.
+
+Karakteristik PIN:
+- PIN disimpan di shared_preferences.
+- PIN baru disimpan dalam bentuk hash SHA-256, bukan plain text.
+- Ada kompatibilitas untuk PIN lama yang masih plain text. Jika PIN lama
+  berhasil diverifikasi, sistem otomatis meng-upgrade penyimpanan ke hash.
+- PIN harus terdiri dari 6 angka.
+- Jika belum ada PIN yang tersimpan, aplikasi dapat otomatis terbuka.
+- Jika PIN sudah ada, pengguna harus memasukkan PIN untuk membuka aplikasi.
+
+Proteksi percobaan gagal:
+- Jika PIN salah, jumlah percobaan gagal dihitung.
+- Setelah 5 kali salah, akses dikunci selama 30 detik.
+- Saat lockout aktif, pengguna harus menunggu sampai waktu kunci selesai.
+
+Fitur kunci aplikasi:
+- Pada shell utama tersedia aksi untuk mengunci aplikasi.
+- Jika aplikasi dikunci, pengguna perlu memasukkan PIN kembali.
+- Tersedia opsi reset/lupa PIN pada layar PIN untuk menghapus PIN lama dan
+  membuat ulang akses.
+
+
+============================================================
+6. STRUKTUR NAVIGASI UTAMA
+============================================================
+
+Setelah melewati startup dan PIN, pengguna masuk ke MainDesktopShell.
+
+Menu sidebar utama:
+1. Dashboard
+   Ringkasan operasional.
+
+2. Kasir
+   Transaksi penjualan.
+
+3. Obat
+   Katalog data obat.
+
+4. Stok
+   Mutasi stok masuk dan keluar.
+
+5. Master
+   Kategori obat dan supplier.
+
+6. Laporan
+   Analitik penjualan.
+
+7. Data
+   Excel, impor, ekspor, backup, dan restore.
+
+Fitur shell:
+- Sidebar dapat diciutkan.
+- Sidebar responsif otomatis pada layar kecil.
+- Topbar menampilkan nama halaman aktif dan subtitle.
+- Topbar menyediakan toggle mode terang/gelap.
+- Topbar menampilkan jam berjalan.
+- Tersedia tombol untuk mengunci aplikasi.
+- Navigasi antar halaman memakai animasi transisi ringan.
+
+
+============================================================
+7. DASHBOARD
+============================================================
+
+Dashboard adalah halaman ringkasan operasional apotek.
+
+Informasi utama yang ditampilkan:
+- Penjualan hari ini.
+- Jumlah transaksi kasir hari ini.
+- Jumlah item obat aktif di katalog.
+- Jumlah obat dengan stok menipis.
+
+Panel dashboard:
+- Empty state database baru:
+  Menampilkan ajakan Tambah Obat ketika katalog SQLite masih kosong.
+
+- Kartu statistik:
+  Menampilkan metrik operasional dalam bentuk kartu ringkas.
+
+- Pantauan stok menipis:
+  Menampilkan daftar obat aktif yang stoknya sudah sama dengan atau di bawah
+  stok minimal.
+
+- Akses cepat:
+  Tombol cepat untuk membuka Kasir Penjualan, Katalog Obat, Laporan, dan Data
+  Backup/Excel.
+
+Fungsi dashboard:
+- Membantu pemilik atau kasir melihat kondisi harian tanpa membuka banyak
+  halaman.
+- Menjadi pusat pemantauan penjualan dan stok.
+- Memberi peringatan dini untuk obat yang perlu restok.
+
+
+============================================================
+8. FITUR KASIR PENJUALAN
+============================================================
+
+Halaman Kasir digunakan untuk memproses transaksi penjualan obat.
+
+Fitur utama:
+- Pencarian obat berdasarkan nama atau kode obat.
+- Menampilkan daftar obat aktif yang bisa dijual.
+- Menambahkan obat ke keranjang.
+- Mengecek stok sebelum obat dapat masuk ke transaksi.
+- Mengubah jumlah item di keranjang.
+- Menghapus item dari keranjang.
+- Mengosongkan keranjang.
+- Menginput uang pembayaran pelanggan.
+- Tombol uang pas.
+- Tombol preset nominal pembayaran.
+- Perhitungan total belanja otomatis.
+- Perhitungan kembalian otomatis.
+- Validasi uang bayar agar tidak kurang dari total.
+- Proses transaksi dengan penyimpanan ke database.
+
+Saat transaksi diproses:
+- Sistem membuat nomor transaksi otomatis dengan format:
+  TRX-YYYYMMDD-0001
+- Data transaksi utama disimpan ke tabel transaksi.
+- Detail item disimpan ke tabel detail_transaksi.
+- Stok obat dikurangi otomatis.
+- Mutasi stok keluar otomatis dicatat ke tabel stok dengan catatan penjualan.
+- Struk transaksi ditampilkan setelah pembayaran berhasil.
+
+Struk transaksi:
+- Menampilkan nomor transaksi.
+- Menampilkan tanggal dan waktu transaksi.
+- Menampilkan daftar item, jumlah, harga satuan, dan subtotal.
+- Menampilkan total belanja, bayar, dan kembalian.
+- Bisa dicetak menggunakan fitur printing/PDF dengan format roll 80 mm.
+
+Manfaat fitur kasir:
+- Mempercepat pelayanan pelanggan.
+- Mengurangi risiko salah hitung.
+- Menghubungkan penjualan dengan stok secara otomatis.
+- Membuat riwayat transaksi tersimpan dan dapat dipakai untuk laporan.
+
+
+============================================================
+9. KATALOG OBAT
+============================================================
+
+Halaman Obat digunakan untuk mengelola data produk obat.
+
+Data obat yang dikelola:
+- Kode obat.
+- Nama obat.
+- Kategori obat.
+- Supplier.
+- Harga beli.
+- Harga jual.
+- Stok tersedia.
+- Stok minimal.
+- Deskripsi.
+- Status aktif/nonaktif.
+
+Fitur katalog:
+- Menampilkan daftar obat dalam layout desktop dan compact.
+- Mencari obat berdasarkan nama atau kode.
+- Filter berdasarkan kategori.
+- Menambah obat baru.
+- Mengedit data obat.
+- Menghapus atau menonaktifkan obat.
+- Mengaktifkan kembali obat nonaktif.
+- Menampilkan kategori dan supplier pada baris obat.
+- Menampilkan informasi harga dan stok.
+
+Aturan penghapusan obat:
+- Jika obat belum pernah dipakai dalam transaksi atau mutasi stok, obat dapat
+  dihapus permanen.
+- Jika obat sudah pernah dipakai dalam transaksi/stok, obat tidak dihapus
+  permanen, melainkan dinonaktifkan agar riwayat transaksi tetap aman.
+- Obat nonaktif tidak masuk katalog aktif, tetapi dapat diaktifkan kembali.
+
+Manfaat katalog:
+- Menjadi pusat data produk apotek.
+- Menjaga kode obat unik.
+- Menghubungkan produk dengan kategori dan supplier.
+- Menjadi sumber data untuk kasir, stok, laporan, dan Excel.
+
+
+============================================================
+10. MANAJEMEN STOK
+============================================================
+
+Halaman Stok digunakan untuk mencatat perubahan stok obat.
+
+Jenis mutasi:
+- Stok masuk.
+- Stok keluar.
+
+Fitur input mutasi:
+- Memilih obat dari daftar.
+- Memilih jenis mutasi.
+- Mengisi jumlah unit.
+- Menulis catatan atau alasan mutasi.
+- Menyimpan perubahan stok.
+
+Validasi stok:
+- Obat harus dipilih.
+- Jumlah unit harus angka positif.
+- Untuk stok keluar, sistem menjaga agar stok tidak menjadi negatif.
+- Setelah mutasi disimpan, stok tersedia pada data obat ikut berubah.
+
+Riwayat mutasi:
+- Menampilkan catatan stok terbaru dari yang paling baru.
+- Menampilkan nama obat, jenis mutasi, jumlah unit, catatan, dan tanggal.
+- Mutasi dari transaksi kasir juga masuk otomatis sebagai stok keluar.
+
+Manfaat fitur stok:
+- Membantu audit keluar-masuk barang.
+- Membedakan restok manual dengan pengurangan stok karena penjualan.
+- Membantu memantau obat habis atau hampir habis.
+
+
+============================================================
+11. MASTER DATA: KATEGORI DAN SUPPLIER
+============================================================
+
+Halaman Master mengelola data pendukung untuk katalog obat.
+
+Kategori obat:
+- Tambah kategori.
+- Edit kategori.
+- Hapus kategori.
+- Menyimpan nama dan deskripsi kategori.
+- Dipakai untuk pengelompokan obat, filter katalog, dan konteks laporan.
+
+Supplier:
+- Tambah supplier.
+- Edit supplier.
+- Hapus supplier.
+- Menyimpan nama supplier, kontak, dan alamat.
+- Dipakai untuk melengkapi data sumber/pemasok obat.
+
+Manfaat master data:
+- Membuat katalog obat lebih tertata.
+- Memudahkan pencarian dan filter.
+- Membantu admin melihat asal produk dari supplier tertentu.
+
+
+============================================================
+12. LAPORAN PENJUALAN
+============================================================
+
+Halaman Laporan digunakan untuk membaca performa penjualan pada rentang
+tanggal tertentu.
+
+Fitur laporan:
+- Pilih rentang tanggal.
+- Ringkasan total penjualan.
+- Ringkasan total transaksi.
+- Ringkasan total item terjual.
+- Estimasi keuntungan.
+- Daftar lima obat terlaris berdasarkan jumlah terjual.
+
+Perhitungan laporan:
+- Total penjualan diambil dari total transaksi pada periode.
+- Total transaksi dihitung dari jumlah struk/record transaksi.
+- Total item terjual dihitung dari jumlah_item transaksi.
+- Estimasi keuntungan dihitung dari:
+  (harga jual saat transaksi - harga beli obat) x jumlah item.
+- Obat terlaris dihitung dari detail transaksi, dikelompokkan per obat, lalu
+  diurutkan berdasarkan total jumlah terjual.
+
+Manfaat laporan:
+- Membantu pemilik mengetahui omzet.
+- Membantu melihat produk yang paling laku.
+- Membantu memperkirakan keuntungan.
+- Membantu pengambilan keputusan restok dan pembelian.
+
+
+============================================================
+13. DATA, EXCEL, BACKUP, DAN RESTORE
+============================================================
+
+Halaman Data & Excel menangani kebutuhan impor, ekspor, backup, dan restore.
+
+A. Prinsip penggunaan Excel
+- SQLite adalah sumber data utama seluruh halaman operasional.
+- Aplikasi tidak menyimpan atau memuat file Excel sebagai sumber terhubung.
+- Excel hanya dibaca setelah pengguna memilih file dan menekan Impor sekarang.
+- Aplikasi tetap berfungsi penuh jika tidak ada file Excel di komputer.
+
+B. Impor Excel
+- Mendukung file .xlsx.
+- Pengguna memilih file dari komputer.
+- Sistem membaca sheet dalam file Excel.
+- Sistem mencoba mendeteksi header kolom secara otomatis.
+- Header dapat memakai bahasa Indonesia atau Inggris.
+- Jika header tidak dikenali, sistem melakukan inferensi berdasarkan posisi
+  dan contoh nilai kolom.
+- Sistem dapat membaca angka dengan format Rupiah, titik, atau koma.
+- Kode obat dapat dibuat otomatis jika kosong.
+- Harga beli dapat diestimasi dari harga jual jika tidak tersedia.
+- Stok minimal default menggunakan nilai 5 jika tidak tersedia.
+- Data dengan kode yang sudah ada akan diperbarui.
+- Data dengan kode baru akan ditambahkan.
+- Baris kosong atau rusak akan dilewati dan dilaporkan.
+
+Mode ganti katalog:
+- Jika opsi "Ganti isi katalog" aktif, data aktif yang tidak ada di file baru
+  akan diarsipkan/nonaktif.
+- Riwayat transaksi dan stok tetap aman.
+
+Hasil impor:
+- Menampilkan jumlah data baru.
+- Menampilkan jumlah data diperbarui.
+- Menampilkan jumlah data diarsipkan.
+- Menampilkan jumlah baris dilewati.
+- Menampilkan error yang perlu diperiksa.
+
+C. Ekspor Excel
+- Mengekspor katalog obat aktif ke file .xlsx.
+- Laporan periode dapat diekspor dari halaman Laporan langsung dari SQLite.
+- File berisi:
+  ID, Kode Obat, Nama Obat, Kategori, Supplier, Harga Beli, Harga Jual,
+  Stok Tersedia, Stok Minimal, dan Deskripsi.
+- Nama file default memakai format:
+  FirdanFarma_DataObat_YYYYMMDD_HHMMSS.xlsx
+
+D. Template Excel
+- Aplikasi dapat membuat template contoh untuk impor data obat.
+- Nama template:
+  Template_Import_DataObat_FirdanFarma.xlsx
+
+E. Backup database
+- Mengekspor database lokal aktif menjadi file .db atau .sqlite.
+- Nama backup default:
+  firdan_farma_backup_<timestamp>.db
+- Berguna untuk pemindahan komputer atau arsip berkala.
+
+F. Restore database
+- Pengguna memilih file backup .db atau .sqlite.
+- Sistem memvalidasi struktur database sebelum restore.
+- Tabel utama yang dicek antara lain obat, transaksi, stok, dan
+  detail_transaksi.
+- Sebelum menimpa database aktif, sistem membuat backup otomatis dari database
+  saat ini.
+- Setelah restore, database dibuka ulang dan data dimuat kembali.
+
+
+============================================================
+14. DATABASE LOKAL
+============================================================
+
+Database lokal:
+firdan_farma.db
+
+Lokasi:
+Disimpan di folder dokumen aplikasi pengguna melalui path_provider.
+
+Tabel utama:
+1. kategori_obat
+   Menyimpan kategori produk obat.
+
+2. supplier
+   Menyimpan data pemasok.
+
+3. obat
+   Menyimpan data katalog obat, harga, stok, kategori, supplier, deskripsi,
+   status aktif, dan waktu pembuatan.
+
+4. stok
+   Menyimpan riwayat mutasi stok masuk dan keluar.
+
+5. transaksi
+   Menyimpan data transaksi utama: nomor transaksi, total, bayar, kembali,
+   tanggal, dan jumlah item.
+
+6. detail_transaksi
+   Menyimpan detail item pada transaksi: obat, jumlah, harga satuan, subtotal.
+
+Relasi data:
+- obat terhubung ke kategori_obat melalui kategori_id.
+- obat terhubung ke supplier melalui supplier_id.
+- stok terhubung ke obat melalui obat_id.
+- detail_transaksi terhubung ke transaksi melalui transaksi_id.
+- detail_transaksi terhubung ke obat melalui obat_id.
+
+Database menggunakan foreign key dan index untuk mempercepat pencarian pada
+kolom yang sering dipakai, seperti kategori, supplier, status aktif, nama obat,
+kode obat, tanggal mutasi, tanggal transaksi, dan detail transaksi.
+
+Data awal saat database dibuat:
+- Beberapa kategori obat, seperti analgesik, antibiotik, vitamin, dan obat
+  batuk/flu.
+- Tidak ada supplier contoh.
+- Tidak ada obat atau stok contoh; katalog baru boleh berisi 0 obat.
+
+
+============================================================
+15. DESAIN ANTARMUKA
+============================================================
+
+Karakter desain:
+- Modern, bersih, dan fokus pada workflow operasional.
+- Menggunakan warna utama hijau/teal yang sesuai dengan tema apotek dan
+  kesehatan.
+- Menggunakan kartu statistik dan panel informasi.
+- Radius komponen dibuat rapi dan tidak terlalu membulat.
+- Menggunakan ikon Material untuk memperjelas aksi.
+- Mendukung light mode dan dark mode.
+- Preferensi tema disimpan sehingga pilihan pengguna tetap aktif saat aplikasi
+  dibuka kembali.
+
+Layar startup:
+- Menggunakan click screen modern.
+- Menggunakan visual daun sebagai identitas segar dan farmasi.
+- Tidak memakai form login tradisional.
+- Masuk dilakukan dengan klik layar setelah sistem siap.
+
+Shell utama:
+- Sidebar untuk navigasi utama.
+- Topbar untuk status halaman, tema, waktu, dan kunci aplikasi.
+- Layout responsif untuk layar besar maupun compact.
+
+
+============================================================
+16. KELEBIHAN APLIKASI
+============================================================
+
+Kelebihan utama:
+- Bisa berjalan offline.
+- Data tersimpan lokal di komputer.
+- Cocok untuk operasional apotek harian.
+- Kasir langsung terhubung dengan stok.
+- Stok keluar otomatis tercatat saat transaksi.
+- Katalog obat mendukung kategori dan supplier.
+- Obat yang punya riwayat tidak dihapus permanen, sehingga histori tetap aman.
+- Ada laporan omzet, transaksi, item terjual, estimasi keuntungan, dan obat
+  terlaris.
+- Impor Excel fleksibel dan tidak terlalu bergantung pada urutan kolom.
+- Ada backup dan restore database.
+- Ada proteksi PIN dengan hashing dan lockout.
+- UI sudah mendukung mode terang dan gelap.
+
+
+============================================================
+17. BATASAN SAAT INI
+============================================================
+
+Beberapa batasan yang terlihat dari fitur saat ini:
+- Aplikasi masih berorientasi single-user/kasir utama, belum terlihat ada
+  manajemen multi-user dan role detail.
+- Data bekerja lokal, belum ada sinkronisasi cloud/server real-time.
+- Laporan saat ini berfokus pada ringkasan dan obat terlaris, belum terlihat
+  ekspor laporan khusus.
+- Alamat pada struk masih memakai teks contoh "Jl. Kesehatan No. 1, Kota".
+- PIN dapat direset dari layar PIN, sehingga untuk lingkungan produksi fitur
+  ini perlu disesuaikan dengan kebijakan administrator.
+
+
+============================================================
+18. POTENSI PENGEMBANGAN
+============================================================
+
+Pengembangan yang dapat ditambahkan di masa depan:
+- Multi-user dengan role admin, kasir, dan gudang.
+- Hak akses per menu.
+- Profil apotek untuk mengatur nama, alamat, nomor telepon, dan catatan struk.
+- Barcode scanner untuk kasir.
+- Manajemen tanggal kedaluwarsa obat.
+- Batch/lot obat.
+- Hutang/piutang atau pembayaran non-tunai.
+- Retur penjualan.
+- Purchase order ke supplier.
+- Laporan yang bisa diekspor ke PDF/Excel.
+- Sinkronisasi cloud atau backup otomatis.
+- Audit log aktivitas pengguna.
+- Notifikasi stok kritis yang lebih aktif.
+
+
+============================================================
+19. KESIMPULAN
+============================================================
+
+Apotek Firdan Farma adalah aplikasi manajemen apotek desktop yang cukup lengkap
+untuk kebutuhan operasional dasar sampai menengah. Aplikasi ini menggabungkan
+katalog obat, kasir penjualan, stok, master kategori dan supplier, laporan,
+Excel, backup database, serta keamanan PIN dalam satu sistem yang berjalan
+secara lokal di Windows.
+
+Kekuatan utama aplikasi ini adalah integrasi antarfitur: transaksi kasir tidak
+hanya menyimpan penjualan, tetapi juga otomatis mengurangi stok dan mencatat
+mutasi. Data katalog dikelola manual sebagai alur utama dan dapat diimpor dari
+Excel secara eksplisit bila diperlukan. Semua hasil disimpan di SQLite dan
+dapat dipakai langsung oleh kasir, dashboard, dan laporan. Dengan desain UI
+modern dan workflow yang jelas, aplikasi ini cocok dipakai sebagai sistem kasir
+dan manajemen internal untuk Apotek Firdan Farma.

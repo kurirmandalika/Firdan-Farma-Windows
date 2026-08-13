@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:firdan_farma_windows/application/providers/app_provider.dart';
 import 'package:firdan_farma_windows/application/providers/obat_provider.dart';
+import 'package:firdan_farma_windows/application/providers/pembelian_provider.dart';
 import 'package:firdan_farma_windows/application/providers/transaksi_provider.dart';
 import 'package:firdan_farma_windows/core/theme/app_theme.dart';
 import 'package:firdan_farma_windows/core/utils/responsive_helper.dart';
@@ -24,6 +25,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<ObatProvider>(context, listen: false).fetchDashboardSummary();
       Provider.of<TransaksiProvider>(context, listen: false).fetchSummary();
+      Provider.of<PembelianProvider>(context, listen: false).fetchSummary();
     });
   }
 
@@ -35,12 +37,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       decimalDigits: 0,
     );
 
-    return Consumer3<AppProvider, ObatProvider, TransaksiProvider>(
-      builder: (context, appProv, obatProv, txProv, _) {
+    return Consumer4<
+      AppProvider,
+      ObatProvider,
+      TransaksiProvider,
+      PembelianProvider
+    >(
+      builder: (context, appProv, obatProv, txProv, beliProv, _) {
         final totalObatCount = obatProv.totalActiveCount;
         final lowStockCount = obatProv.lowStockList.length;
         final todayRevenue = txProv.todayRevenue;
+        final todayGrossProfit = txProv.todayGrossProfit;
         final todayTxCount = txProv.todayTxCount;
+        final todayPurchase = beliProv.todayPurchaseTotal;
 
         return LayoutBuilder(
           builder: (context, constraints) {
@@ -59,8 +68,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _SpreadsheetBanner(appProv: appProv),
-                  const SizedBox(height: 18),
+                  if (totalObatCount == 0) ...[
+                    _FirstMedicinePrompt(onAdd: () => appProv.setNavIndex(2)),
+                    const SizedBox(height: 18),
+                  ],
                   GridView.count(
                     crossAxisCount: crossAxisCount,
                     crossAxisSpacing: 14,
@@ -80,12 +91,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         iconColor: AppTheme.primaryTeal,
                       ),
                       StatCard(
+                        title: 'Laba Kotor Hari Ini',
+                        value: currencyFormatter.format(todayGrossProfit),
+                        subtitle: 'Berdasarkan harga modal snapshot',
+                        icon: Icons.account_balance_wallet_outlined,
+                        iconBgColor: AppTheme.emeraldLight,
+                        iconColor: AppTheme.emeraldGreen,
+                      ),
+                      StatCard(
                         title: 'Transaksi Kasir',
                         value: '$todayTxCount',
                         subtitle: 'Invoice tersimpan hari ini',
                         icon: Icons.receipt_long_outlined,
-                        iconBgColor: AppTheme.emeraldLight,
-                        iconColor: AppTheme.emeraldGreen,
+                        iconBgColor: AppTheme.primaryTealLight,
+                        iconColor: AppTheme.primaryTeal,
                       ),
                       StatCard(
                         title: 'Katalog Obat',
@@ -108,6 +127,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         iconColor: lowStockCount > 0
                             ? AppTheme.warningOrange
                             : AppTheme.successGreen,
+                      ),
+                      StatCard(
+                        title: 'Pembelian Hari Ini',
+                        value: currencyFormatter.format(todayPurchase),
+                        subtitle: 'Obat masuk dari supplier',
+                        icon: Icons.shopping_bag_outlined,
+                        iconBgColor: AppTheme.warningBg,
+                        iconColor: AppTheme.warningOrange,
                       ),
                     ],
                   ),
@@ -164,7 +191,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             title: 'Pantauan Stok Menipis',
             subtitle: 'Item aktif yang sudah mencapai batas stok minimal',
             trailing: OutlinedButton.icon(
-              onPressed: () => appProv.setNavIndex(3),
+              onPressed: () => appProv.setNavIndex(4),
               icon: const Icon(Icons.swap_vert, size: 16),
               label: const Text('Mutasi'),
             ),
@@ -172,10 +199,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 16),
           const Divider(),
           if (items.isEmpty)
-            const EmptyState(
-              icon: Icons.check_circle_outline,
-              title: 'Stok aman',
-              subtitle: 'Tidak ada obat aktif di bawah batas minimal.',
+            EmptyState(
+              icon: obatProv.totalActiveCount == 0
+                  ? Icons.medication_outlined
+                  : Icons.check_circle_outline,
+              title: obatProv.totalActiveCount == 0
+                  ? 'Belum ada obat'
+                  : 'Stok aman',
+              subtitle: obatProv.totalActiveCount == 0
+                  ? 'Tambahkan obat pertama untuk mulai mencatat stok dan penjualan.'
+                  : 'Tidak ada obat aktif di bawah batas minimal.',
             )
           else
             ListView.separated(
@@ -298,18 +331,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
             onTap: () => appProv.setNavIndex(2),
           ),
           _QuickActionTile(
+            label: 'Catat Pembelian',
+            subtitle: 'Stok datang dari supplier',
+            icon: Icons.shopping_bag_outlined,
+            color: AppTheme.warningOrange,
+            onTap: () => appProv.setNavIndex(3),
+          ),
+          _QuickActionTile(
             label: 'Lihat Laporan',
             subtitle: 'Pantau omset dan item terlaris',
             icon: Icons.analytics_outlined,
             color: AppTheme.cyanAccent,
-            onTap: () => appProv.setNavIndex(5),
+            onTap: () => appProv.setNavIndex(6),
           ),
           _QuickActionTile(
             label: 'Backup dan Excel',
             subtitle: 'Ekspor, impor, atau pulihkan data',
             icon: Icons.sd_storage_outlined,
             color: AppTheme.indigo,
-            onTap: () => appProv.setNavIndex(6),
+            onTap: () => appProv.setNavIndex(7),
           ),
         ],
       ),
@@ -317,90 +357,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 }
 
-class _SpreadsheetBanner extends StatelessWidget {
-  final AppProvider appProv;
+class _FirstMedicinePrompt extends StatelessWidget {
+  final VoidCallback onAdd;
 
-  const _SpreadsheetBanner({required this.appProv});
+  const _FirstMedicinePrompt({required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
-    final connected = appProv.connectedSpreadsheetPath != null;
-    final color = connected ? AppTheme.primaryTeal : AppTheme.warningOrange;
-
     return MedicalCard(
-      padding: const EdgeInsets.all(16),
-      backgroundColor: connected
-          ? AppTheme.primaryTealLight.withValues(alpha: 0.65)
-          : AppTheme.warningBg,
-      border: BorderSide(color: color.withValues(alpha: 0.35)),
+      backgroundColor: AppTheme.primaryTealLight.withValues(alpha: 0.55),
+      border: BorderSide(color: AppTheme.primaryTeal.withValues(alpha: 0.25)),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final isCompact = constraints.maxWidth < 640;
-          final content = Row(
+          final message = Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                ),
-                child: Icon(
-                  connected ? Icons.table_chart : Icons.table_chart_outlined,
-                  color: color,
-                  size: 22,
-                ),
-              ),
+              Icon(Icons.inventory_2_outlined, color: AppTheme.primaryTeal),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      connected
-                          ? 'Spreadsheet Excel terhubung'
-                          : 'Spreadsheet Excel belum terhubung',
+                      'Belum ada data obat',
                       style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 14,
                         color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 3),
                     Text(
-                      appProv.connectedSpreadsheetPath ??
-                          'Hubungkan file .xlsx untuk ekspor dan impor data obat.',
+                      'Tambahkan obat pertama untuk mulai menggunakan Apotek Firdan Farma.',
                       style: TextStyle(
-                        fontSize: 12,
                         color: AppTheme.textSecondary,
+                        fontSize: 12,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
             ],
           );
-
           final action = ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: color),
-            onPressed: () => appProv.setNavIndex(6),
-            icon: const Icon(Icons.sync_alt, size: 16),
-            label: Text(connected ? 'Kelola' : 'Hubungkan'),
+            onPressed: onAdd,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Tambah Obat'),
           );
-
-          if (isCompact) {
+          if (constraints.maxWidth < 620) {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [content, const SizedBox(height: 12), action],
+              children: [message, const SizedBox(height: 14), action],
             );
           }
-
           return Row(
             children: [
-              Expanded(child: content),
+              Expanded(child: message),
               const SizedBox(width: 12),
               action,
             ],

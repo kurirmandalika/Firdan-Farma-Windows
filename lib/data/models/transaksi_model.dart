@@ -6,6 +6,7 @@ class Transaksi {
   final double total;
   final double bayar;
   final double kembali;
+  final String metodePembayaran;
   final String tanggal;
   final int jumlahItem;
   final List<DetailTransaksi> items;
@@ -16,6 +17,7 @@ class Transaksi {
     required this.total,
     required this.bayar,
     required this.kembali,
+    this.metodePembayaran = 'TUNAI',
     required this.tanggal,
     required this.jumlahItem,
     this.items = const [],
@@ -31,6 +33,7 @@ class Transaksi {
       total: (map['total'] as num).toDouble(),
       bayar: (map['bayar'] as num).toDouble(),
       kembali: (map['kembali'] as num).toDouble(),
+      metodePembayaran: map['metode_pembayaran'] as String? ?? 'TUNAI',
       tanggal: map['tanggal'] as String,
       jumlahItem: map['jumlah_item'] as int? ?? 0,
       items: items,
@@ -44,6 +47,7 @@ class Transaksi {
       'total': total,
       'bayar': bayar,
       'kembali': kembali,
+      'metode_pembayaran': metodePembayaran,
       'tanggal': tanggal,
       'jumlah_item': jumlahItem,
     };

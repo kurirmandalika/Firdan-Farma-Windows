@@ -16,6 +16,8 @@ class CartItem {
 class TransaksiProvider extends ChangeNotifier {
   final TransaksiService _service = TransaksiService();
 
+  static const paymentMethods = ['TUNAI', 'QRIS', 'TRANSFER', 'LAINNYA'];
+
   final List<CartItem> _cartItems = [];
   List<CartItem> get cartItems => _cartItems;
 
@@ -24,6 +26,9 @@ class TransaksiProvider extends ChangeNotifier {
 
   double _bayar = 0.0;
   double get bayar => _bayar;
+
+  String _metodePembayaran = 'TUNAI';
+  String get metodePembayaran => _metodePembayaran;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -34,10 +39,16 @@ class TransaksiProvider extends ChangeNotifier {
   double _todayRevenue = 0.0;
   double get todayRevenue => _todayRevenue;
 
+  double _todayGrossProfit = 0.0;
+  double get todayGrossProfit => _todayGrossProfit;
+
   double get totalBelanja =>
       _cartItems.fold(0.0, (sum, item) => sum + item.subtotal);
-  double get kembali =>
-      (_bayar >= totalBelanja) ? (_bayar - totalBelanja) : 0.0;
+  double get effectiveBayar =>
+      _metodePembayaran == 'TUNAI' ? _bayar : totalBelanja;
+  double get kembali => (_metodePembayaran == 'TUNAI' && _bayar >= totalBelanja)
+      ? (_bayar - totalBelanja)
+      : 0.0;
   int get totalItemCount =>
       _cartItems.fold(0, (sum, item) => sum + item.jumlah);
 
@@ -46,9 +57,11 @@ class TransaksiProvider extends ChangeNotifier {
       final results = await Future.wait([
         _service.getTodayCount(),
         _service.getTodayRevenue(),
+        _service.getTodayGrossProfit(),
       ]);
       _todayTxCount = results[0] as int;
       _todayRevenue = results[1] as double;
+      _todayGrossProfit = results[2] as double;
       notifyListeners();
     } catch (e) {
       debugPrint('Error fetchSummary: $e');
@@ -116,6 +129,7 @@ class TransaksiProvider extends ChangeNotifier {
   void clearCart() {
     _cartItems.clear();
     _bayar = 0.0;
+    _metodePembayaran = 'TUNAI';
     notifyListeners();
   }
 
@@ -124,11 +138,23 @@ class TransaksiProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setMetodePembayaran(String value) {
+    if (!paymentMethods.contains(value)) return;
+    _metodePembayaran = value;
+    if (value != 'TUNAI') {
+      _bayar = totalBelanja;
+    }
+    notifyListeners();
+  }
+
   Future<Transaksi?> processCheckout() async {
+    if (_isLoading) {
+      throw Exception('Transaksi sedang diproses. Tunggu sebentar.');
+    }
     if (_cartItems.isEmpty) {
       throw Exception('Keranjang belanja masih kosong!');
     }
-    if (_bayar < totalBelanja) {
+    if (_metodePembayaran == 'TUNAI' && _bayar < totalBelanja) {
       throw Exception('Nominal pembayaran kurang dari total!');
     }
 
@@ -142,6 +168,7 @@ class TransaksiProvider extends ChangeNotifier {
               obatId: item.obat.id!,
               jumlah: item.jumlah,
               hargaSatuan: item.obat.hargaJual,
+              hargaModalSatuan: item.obat.hargaBeli,
               subtotal: item.subtotal,
               namaObat: item.obat.nama,
               kodeObat: item.obat.kodeObat,
@@ -151,7 +178,8 @@ class TransaksiProvider extends ChangeNotifier {
 
       final resultTx = await _service.createTransaksi(
         total: totalBelanja,
-        bayar: _bayar,
+        bayar: effectiveBayar,
+        metodePembayaran: _metodePembayaran,
         items: detailItems,
       );
 

@@ -51,6 +51,10 @@ class ReceiptDialog extends StatelessWidget {
                 'Tanggal : ${DateFormat('dd/MM/yyyy HH:mm').format(DateTime.parse(transaksi.tanggal))}',
                 style: const pw.TextStyle(fontSize: 9),
               ),
+              pw.Text(
+                'Bayar via : ${transaksi.metodePembayaran}',
+                style: const pw.TextStyle(fontSize: 9),
+              ),
               pw.Divider(thickness: 0.5),
               ...transaksi.items.map(
                 (item) => pw.Row(
@@ -218,6 +222,14 @@ class ReceiptDialog extends StatelessWidget {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Metode pembayaran: ${transaksi.metodePembayaran}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textSecondary,
+                    ),
                   ),
                   const Divider(height: 16),
                   ConstrainedBox(

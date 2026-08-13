@@ -50,19 +50,12 @@ class BrandLogo extends StatelessWidget {
             : null,
       ),
       clipBehavior: Clip.antiAlias,
-      child: ClipRect(
-        child: Align(
-          alignment: Alignment.topCenter,
-          heightFactor: 0.72,
-          child: Image.asset(
-            AppConstants.appLogoAsset,
-            width: size,
-            height: size / 0.72,
-            fit: BoxFit.fitWidth,
-            alignment: Alignment.topCenter,
-            filterQuality: FilterQuality.high,
-          ),
-        ),
+      child: Image.asset(
+        AppConstants.appLogoAsset,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
       ),
     );
   }

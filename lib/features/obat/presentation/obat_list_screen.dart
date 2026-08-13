@@ -165,57 +165,6 @@ class _ObatListScreenState extends State<ObatListScreen> {
                 icon: const Icon(Icons.add),
                 label: const Text('Tambah Obat'),
               ),
-              const SizedBox(width: 8),
-              PopupMenuButton<String>(
-                tooltip: 'Tindakan',
-                onSelected: (val) async {
-                  if (val == 'clear') {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (dialogCtx) => AlertDialog(
-                        title: const Text('Kosongkan Katalog Obat'),
-                        content: const Text(
-                            'Semua obat aktif akan dinonaktifkan. Histori transaksi dan stok akan tetap dipertahankan. Lanjutkan?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(dialogCtx).pop(false),
-                            child: const Text('Batal'),
-                          ),
-                          ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.dangerRed,
-                            ),
-                            onPressed: () => Navigator.of(dialogCtx).pop(true),
-                            child: const Text('Kosongkan'),
-                          ),
-                        ],
-                      ),
-                    );
-
-                    if (confirmed == true) {
-                      final obatProv = Provider.of<ObatProvider>(context, listen: false);
-                      final messenger = ScaffoldMessenger.of(context);
-                      try {
-                        await obatProv.clearAllObat();
-                        messenger.showSnackBar(
-                          const SnackBar(content: Text('Katalog obat dikosongkan (obat dinonaktifkan).')),
-                        );
-                      } catch (e) {
-                        messenger.showSnackBar(
-                          SnackBar(content: Text('Gagal mengosongkan katalog: $e'), backgroundColor: AppTheme.dangerRed),
-                        );
-                      }
-                    }
-                  }
-                },
-                itemBuilder: (ctx) => [
-                  const PopupMenuItem<String>(
-                    value: 'clear',
-                    child: Text('Kosongkan Katalog Obat'),
-                  ),
-                ],
-                icon: const Icon(Icons.more_vert),
-              ),
             ],
           ),
           const SizedBox(height: 18),

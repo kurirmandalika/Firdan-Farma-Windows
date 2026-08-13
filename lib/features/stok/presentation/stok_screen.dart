@@ -14,13 +14,80 @@ class StokScreen extends StatefulWidget {
   State<StokScreen> createState() => _StokScreenState();
 }
 
+class _StockTypeButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _StockTypeButton({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        onTap: onTap,
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? color.withValues(alpha: 0.14) : null,
+            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: selected ? color : AppTheme.textMuted,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: selected ? color : AppTheme.textSecondary,
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StokScreenState extends State<StokScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _jumlahController = TextEditingController();
+  final TextEditingController _hargaBeliController = TextEditingController();
   final TextEditingController _catatanController = TextEditingController();
 
   int? _selectedObatId;
   String _selectedJenis = 'masuk';
+  String _selectedAlasanKeluar = 'PENYESUAIAN';
+
+  static const _alasanKeluar = {
+    'PENYESUAIAN': 'Penyesuaian',
+    'RUSAK': 'Rusak',
+    'KEDALUWARSA': 'Kedaluwarsa',
+    'RETUR_SUPPLIER': 'Retur Supplier',
+    'LAINNYA': 'Lainnya',
+  };
 
   @override
   void initState() {
@@ -34,6 +101,7 @@ class _StokScreenState extends State<StokScreen> {
   @override
   void dispose() {
     _jumlahController.dispose();
+    _hargaBeliController.dispose();
     _catatanController.dispose();
     super.dispose();
   }
@@ -58,6 +126,19 @@ class _StokScreenState extends State<StokScreen> {
         return;
       }
 
+      final hargaBeli = _selectedJenis == 'masuk'
+          ? double.tryParse(_hargaBeliController.text.trim())
+          : null;
+      if (_selectedJenis == 'masuk' && (hargaBeli == null || hargaBeli < 0)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Harga beli stok masuk wajib berupa angka valid.'),
+            backgroundColor: AppTheme.dangerRed,
+          ),
+        );
+        return;
+      }
+
       final stokProv = Provider.of<StokProvider>(context, listen: false);
       final obatProv = Provider.of<ObatProvider>(context, listen: false);
       final messenger = ScaffoldMessenger.of(context);
@@ -67,6 +148,8 @@ class _StokScreenState extends State<StokScreen> {
           obatId: _selectedObatId!,
           jenis: _selectedJenis,
           jumlah: jumlah,
+          alasan: _selectedJenis == 'keluar' ? _selectedAlasanKeluar : 'RESTOK',
+          hargaBeli: hargaBeli,
           catatan: _catatanController.text.trim().isNotEmpty
               ? _catatanController.text.trim()
               : null,
@@ -74,6 +157,7 @@ class _StokScreenState extends State<StokScreen> {
 
         if (success && mounted) {
           _jumlahController.clear();
+          _hargaBeliController.clear();
           _catatanController.clear();
           await obatProv.fetchObat();
 
@@ -105,9 +189,8 @@ class _StokScreenState extends State<StokScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const AppPageHeader(
-            title: 'Mutasi Stok',
-            subtitle:
-                'Catat stok masuk dan keluar dengan riwayat yang mudah diaudit',
+            title: 'Stok',
+            subtitle: 'Catat stok masuk atau keluar non-penjualan dengan aman',
             icon: Icons.swap_vert,
           ),
           const SizedBox(height: 18),
@@ -175,6 +258,17 @@ class _StokScreenState extends State<StokScreen> {
     );
   }
 
+  String _selectedUnit(BuildContext context) {
+    final medicines = Provider.of<ObatProvider>(
+      context,
+      listen: false,
+    ).obatList;
+    for (final medicine in medicines) {
+      if (medicine.id == _selectedObatId) return medicine.satuan;
+    }
+    return 'unit';
+  }
+
   Widget _buildFormInput(BuildContext context) {
     return MedicalCard(
       child: Form(
@@ -184,8 +278,8 @@ class _StokScreenState extends State<StokScreen> {
           children: [
             const AppSectionHeader(
               icon: Icons.inventory_2_outlined,
-              title: 'Input Mutasi',
-              subtitle: 'Pilih obat, jenis mutasi, lalu simpan perubahan stok',
+              title: 'Perubahan Stok',
+              subtitle: 'Penjualan hanya dicatat melalui menu Kasir',
             ),
             const SizedBox(height: 16),
             const Divider(),
@@ -209,32 +303,52 @@ class _StokScreenState extends State<StokScreen> {
                       ),
                     );
                   }).toList(),
-                  onChanged: (val) => setState(() => _selectedObatId = val),
+                  onChanged: (val) {
+                    setState(() => _selectedObatId = val);
+                    for (final medicine in obatProv.obatList) {
+                      if (medicine.id == val) {
+                        _hargaBeliController.text = medicine.hargaBeli
+                            .toStringAsFixed(0);
+                        break;
+                      }
+                    }
+                  },
                 );
               },
             ),
             const SizedBox(height: 14),
             SizedBox(
               width: double.infinity,
-              child: SegmentedButton<String>(
-                segments: [
-                  ButtonSegment<String>(
-                    value: 'masuk',
-                    label: Text('Masuk'),
-                    icon: Icon(Icons.south_west, color: AppTheme.emeraldGreen),
-                  ),
-                  ButtonSegment<String>(
-                    value: 'keluar',
-                    label: Text('Keluar'),
-                    icon: Icon(Icons.north_east, color: AppTheme.dangerRed),
-                  ),
-                ],
-                selected: {_selectedJenis},
-                onSelectionChanged: (Set<String> newSelection) {
-                  setState(() {
-                    _selectedJenis = newSelection.first;
-                  });
-                },
+              child: Container(
+                height: 44,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSubtle,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  border: Border.all(color: AppTheme.borderLight),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _StockTypeButton(
+                        label: 'Stok Masuk',
+                        icon: Icons.south_west,
+                        color: AppTheme.emeraldGreen,
+                        selected: _selectedJenis == 'masuk',
+                        onTap: () => setState(() => _selectedJenis = 'masuk'),
+                      ),
+                    ),
+                    Expanded(
+                      child: _StockTypeButton(
+                        label: 'Stok Keluar',
+                        icon: Icons.north_east,
+                        color: AppTheme.dangerRed,
+                        selected: _selectedJenis == 'keluar',
+                        onTap: () => setState(() => _selectedJenis = 'keluar'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 14),
@@ -253,12 +367,58 @@ class _StokScreenState extends State<StokScreen> {
               },
             ),
             const SizedBox(height: 14),
+            if (_selectedJenis == 'masuk') ...[
+              TextFormField(
+                controller: _hargaBeliController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Harga Beli per ${_selectedUnit(context)} *',
+                  prefixIcon: Icon(
+                    Icons.payments_outlined,
+                    color: AppTheme.primaryTeal,
+                  ),
+                ),
+                validator: (value) {
+                  if (_selectedJenis != 'masuk') return null;
+                  final price = double.tryParse(value?.trim() ?? '');
+                  if (price == null || price < 0) {
+                    return 'Harga beli tidak valid';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 14),
+            ] else ...[
+              DropdownButtonFormField<String>(
+                initialValue: _selectedAlasanKeluar,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Alasan Stok Keluar *',
+                ),
+                items: _alasanKeluar.entries
+                    .map(
+                      (entry) => DropdownMenuItem<String>(
+                        value: entry.key,
+                        child: Text(entry.value),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _selectedAlasanKeluar = value);
+                  }
+                },
+              ),
+              const SizedBox(height: 14),
+            ],
             TextFormField(
               controller: _catatanController,
               maxLines: 3,
               decoration: const InputDecoration(
-                labelText: 'Catatan / alasan mutasi',
+                labelText: 'Catatan / alasan mutasi *',
               ),
+              validator: (v) =>
+                  v == null || v.trim().isEmpty ? 'Alasan wajib diisi' : null,
             ),
             const SizedBox(height: 18),
             SizedBox(
@@ -290,7 +450,7 @@ class _StokScreenState extends State<StokScreen> {
         children: [
           const AppSectionHeader(
             icon: Icons.history,
-            title: 'Riwayat Mutasi',
+            title: 'Riwayat Stok',
             subtitle: 'Catatan stok terbaru ditampilkan dari yang paling baru',
           ),
           const SizedBox(height: 16),
@@ -377,10 +537,9 @@ class _StokScreenState extends State<StokScreen> {
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                       Text(
-                                        mutasi.catatan ??
-                                            (isMasuk
-                                                ? 'Stok masuk'
-                                                : 'Stok keluar'),
+                                        '${(mutasi.alasan ?? mutasi.tipeMutasi).replaceAll('_', ' ')}'
+                                        '${mutasi.stokSebelum != null && mutasi.stokSesudah != null ? ' | ${mutasi.stokSebelum} -> ${mutasi.stokSesudah}' : ''}'
+                                        '${mutasi.catatan != null ? ' | ${mutasi.catatan}' : ''}',
                                         style: TextStyle(
                                           fontSize: 11,
                                           color: AppTheme.textSecondary,
@@ -396,7 +555,7 @@ class _StokScreenState extends State<StokScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     Text(
-                                      '${isMasuk ? '+' : '-'}${mutasi.jumlah} unit',
+                                      '${mutasi.qtySigned} ${mutasi.satuan ?? 'unit'}',
                                       style: TextStyle(
                                         fontWeight: FontWeight.w800,
                                         fontSize: 13,

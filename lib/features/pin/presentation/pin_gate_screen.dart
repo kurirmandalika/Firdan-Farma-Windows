@@ -108,13 +108,14 @@ class _PinGateScreenState extends State<PinGateScreen> {
     if (pinProvider.hasPinSet) {
       try {
         final valid = await pinProvider.unlock(_pinInput);
-        if (!valid) {
+        if (mounted && !valid) {
           setState(() {
             _pinInput = '';
             _errorMessage = 'PIN salah. Coba lagi.';
           });
         }
       } catch (e) {
+        if (!mounted) return;
         final msg = e.toString().replaceFirst('Exception: ', '');
         setState(() {
           _pinInput = '';
@@ -126,6 +127,7 @@ class _PinGateScreenState extends State<PinGateScreen> {
       try {
         await pinProvider.setupNewPin(_pinInput);
       } catch (e) {
+        if (!mounted) return;
         final msg = e.toString().replaceFirst('Exception: ', '');
         setState(() {
           _pinInput = '';
@@ -155,6 +157,7 @@ class _PinGateScreenState extends State<PinGateScreen> {
             onPressed: () async {
               Navigator.of(context).pop();
               await Provider.of<PinProvider>(context, listen: false).resetPin();
+              if (!mounted) return;
               setState(() {
                 _pinInput = '';
                 _errorMessage = '';

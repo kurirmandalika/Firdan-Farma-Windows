@@ -29,10 +29,60 @@ class BackupService {
     );
 
     if (outputPath != null) {
-      await dbFile.copy(outputPath);
+      await _dbHelper.closeAndReset();
+      try {
+        await dbFile.copy(outputPath);
+      } finally {
+        await _dbHelper.database;
+      }
       return outputPath;
     }
     return null;
+  }
+
+  Future<String> resetOperationalData() async {
+    final backupPath = await _createAutomaticBackup(
+      prefix: 'backup_auto_before_reset',
+    );
+    final db = await _dbHelper.database;
+
+    await db.transaction((txn) async {
+      await txn.delete('detail_transaksi');
+      await txn.delete('transaksi');
+      await txn.delete('detail_pembelian');
+      await txn.delete('pembelian');
+      await txn.delete('stok');
+      await txn.delete('obat');
+      await txn.delete(
+        'sqlite_sequence',
+        where:
+            "name IN ('obat', 'stok', 'transaksi', 'detail_transaksi', 'pembelian', 'detail_pembelian')",
+      );
+    });
+
+    return backupPath;
+  }
+
+  Future<String> _createAutomaticBackup({required String prefix}) async {
+    final targetDbPath = await _dbHelper.getDbPath();
+    final targetFile = File(targetDbPath);
+    if (!await targetFile.exists()) {
+      throw Exception('Database aktif tidak ditemukan. Reset dibatalkan.');
+    }
+
+    final timeStr = DateTime.now()
+        .toIso8601String()
+        .replaceAll(':', '-')
+        .replaceAll('.', '-');
+    final backupPath = p.join(targetFile.parent.path, '${prefix}_$timeStr.db');
+
+    await _dbHelper.closeAndReset();
+    try {
+      await targetFile.copy(backupPath);
+    } finally {
+      await _dbHelper.database;
+    }
+    return backupPath;
   }
 
   Future<bool> importDatabase(String sourceFilePath) async {
@@ -44,10 +94,7 @@ class BackupService {
     // 1. Validate SQLite database file structure before doing anything
     Database? tempDb;
     try {
-      if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-        sqfliteFfiInit();
-        databaseFactory = databaseFactoryFfi;
-      }
+      DatabaseHelper.ensureDatabaseFactory();
       tempDb = await databaseFactory.openDatabase(
         sourceFilePath,
         options: OpenDatabaseOptions(readOnly: true),
@@ -72,6 +119,17 @@ class BackupService {
     // 2. Create automatic safety backup of current active database
     final targetDbPath = await _dbHelper.getDbPath();
     final targetFile = File(targetDbPath);
+    final sourceAbsolutePath = p
+        .normalize(sourceFile.absolute.path)
+        .toLowerCase();
+    final targetAbsolutePath = p
+        .normalize(targetFile.absolute.path)
+        .toLowerCase();
+    if (sourceAbsolutePath == targetAbsolutePath) {
+      throw Exception(
+        'File yang dipilih adalah database aktif aplikasi. Pilih file backup lain.',
+      );
+    }
     if (await targetFile.exists()) {
       final timeStr = DateTime.now()
           .toIso8601String()

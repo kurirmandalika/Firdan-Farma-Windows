@@ -36,18 +36,19 @@ class ObatProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final results = await Future.wait([
+      final results = await Future.wait<Object>([
         _service.getAll(
           searchQuery: _searchQuery,
           kategoriId: _selectedKategoriId,
           includeInactive: _showInactive,
         ),
         _service.getLowStock(),
+        _service.countActive(),
       ]);
       if (token == _fetchToken) {
-        _obatList = results[0];
-        _lowStockList = results[1];
-        _totalActiveCount = _obatList.where((obat) => obat.isActive).length;
+        _obatList = results[0] as List<Obat>;
+        _lowStockList = results[1] as List<Obat>;
+        _totalActiveCount = results[2] as int;
       }
     } catch (e) {
       debugPrint('Error fetchObat: $e');
@@ -133,20 +134,6 @@ class ObatProvider extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('Error reactivateObat: $e');
-      rethrow;
-    }
-  }
-
-  /// Archive (soft-delete) all active medicines so the catalog appears empty.
-  /// This uses the existing service.archiveExceptCodes with an empty set which
-  /// marks all active obat rows as inactive while preserving transaction/stock history.
-  Future<bool> clearAllObat() async {
-    try {
-      await _service.archiveExceptCodes(<String>{});
-      await fetchObat();
-      return true;
-    } catch (e) {
-      debugPrint('Error clearAllObat: $e');
       rethrow;
     }
   }

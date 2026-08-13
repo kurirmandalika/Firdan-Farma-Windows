@@ -1,10 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'package:firdan_farma_windows/core/theme/app_theme.dart';
 import 'package:firdan_farma_windows/core/constants/app_constants.dart';
+import 'package:firdan_farma_windows/data/database/database_helper.dart';
 
 import 'package:firdan_farma_windows/application/providers/app_provider.dart';
 import 'package:firdan_farma_windows/application/providers/obat_provider.dart';
@@ -13,6 +12,7 @@ import 'package:firdan_farma_windows/application/providers/supplier_provider.dar
 import 'package:firdan_farma_windows/application/providers/stok_provider.dart';
 import 'package:firdan_farma_windows/application/providers/transaksi_provider.dart';
 import 'package:firdan_farma_windows/application/providers/laporan_provider.dart';
+import 'package:firdan_farma_windows/application/providers/pembelian_provider.dart';
 import 'package:firdan_farma_windows/application/providers/pin_provider.dart';
 
 import 'package:firdan_farma_windows/features/pin/presentation/pin_gate_screen.dart';
@@ -22,11 +22,7 @@ import 'package:firdan_farma_windows/features/startup/presentation/startup_splas
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize SQLite for Desktop (Windows / Linux / macOS)
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    sqfliteFfiInit();
-    databaseFactory = databaseFactoryFfi;
-  }
+  DatabaseHelper.ensureDatabaseFactory();
 
   runApp(const FirdanFarmaApp());
 }
@@ -44,6 +40,7 @@ class FirdanFarmaApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SupplierProvider()),
         ChangeNotifierProvider(create: (_) => StokProvider()),
         ChangeNotifierProvider(create: (_) => TransaksiProvider()),
+        ChangeNotifierProvider(create: (_) => PembelianProvider()),
         ChangeNotifierProvider(create: (_) => LaporanProvider()),
         ChangeNotifierProvider(create: (_) => PinProvider()),
       ],

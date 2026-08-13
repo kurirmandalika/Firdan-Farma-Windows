@@ -29,12 +29,16 @@ class StokProvider extends ChangeNotifier {
     required int obatId,
     required String jenis,
     required int jumlah,
+    String? alasan,
+    double? hargaBeli,
     String? catatan,
   }) async {
     final success = await _service.updateStok(
       obatId: obatId,
       jenis: jenis,
       jumlah: jumlah,
+      alasan: alasan,
+      hargaBeli: hargaBeli,
       catatan: catatan,
     );
     if (success) {

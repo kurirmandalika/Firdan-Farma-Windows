@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firdan_farma_windows/core/theme/app_theme.dart';
-import 'package:firdan_farma_windows/data/services/spreadsheet_service.dart';
 
 class AppProvider extends ChangeNotifier {
   static const _prefsDarkModeKey = 'is_dark_mode';
-
-  final SpreadsheetService _spreadsheetService = SpreadsheetService();
 
   int _selectedNavIndex = 0;
   int get selectedNavIndex => _selectedNavIndex;
@@ -18,9 +15,6 @@ class AppProvider extends ChangeNotifier {
   bool get isDarkMode => _isDarkMode;
   ThemeMode get themeMode => _isDarkMode ? ThemeMode.dark : ThemeMode.light;
 
-  String? _connectedSpreadsheetPath;
-  String? get connectedSpreadsheetPath => _connectedSpreadsheetPath;
-
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -29,7 +23,6 @@ class AppProvider extends ChangeNotifier {
 
   AppProvider() {
     _initThemeMode();
-    _initSpreadsheetStatus();
   }
 
   void setNavIndex(int index) {
@@ -65,17 +58,6 @@ class AppProvider extends ChangeNotifier {
 
   void setLoading(bool value) {
     _isLoading = value;
-    notifyListeners();
-  }
-
-  Future<void> _initSpreadsheetStatus() async {
-    _connectedSpreadsheetPath = await _spreadsheetService
-        .getConnectedSpreadsheetPath();
-    notifyListeners();
-  }
-
-  void updateSpreadsheetPath(String? path) {
-    _connectedSpreadsheetPath = path;
     notifyListeners();
   }
 

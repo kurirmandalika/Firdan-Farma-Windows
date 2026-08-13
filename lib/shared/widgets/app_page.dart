@@ -118,13 +118,19 @@ class AppPageHeader extends StatelessWidget {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: titleGroup),
+            Expanded(flex: 4, child: titleGroup),
             const SizedBox(width: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.end,
-              children: actions,
+            Expanded(
+              flex: 6,
+              child: Align(
+                alignment: Alignment.topRight,
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.end,
+                  children: actions,
+                ),
+              ),
             ),
           ],
         );
@@ -188,12 +194,14 @@ class EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
+  final Widget? action;
 
   const EmptyState({
     super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
+    this.action,
   });
 
   @override
@@ -230,6 +238,7 @@ class EmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
+            if (action != null) ...[const SizedBox(height: 16), action!],
           ],
         ),
       ),

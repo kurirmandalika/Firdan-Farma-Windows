@@ -600,7 +600,8 @@ class _PaymentPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final canCheckout =
         txProv.cartItems.isNotEmpty &&
-        txProv.bayar >= txProv.totalBelanja &&
+        (txProv.metodePembayaran != 'TUNAI' ||
+            txProv.bayar >= txProv.totalBelanja) &&
         !txProv.isLoading;
 
     return Column(
@@ -628,11 +629,40 @@ class _PaymentPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 10),
+        DropdownButtonFormField<String>(
+          initialValue: txProv.metodePembayaran,
+          decoration: InputDecoration(
+            labelText: 'Metode Pembayaran',
+            prefixIcon: Icon(
+              Icons.account_balance_wallet_outlined,
+              color: AppTheme.primaryTeal,
+            ),
+          ),
+          items: TransaksiProvider.paymentMethods
+              .map(
+                (method) => DropdownMenuItem<String>(
+                  value: method,
+                  child: Text(method),
+                ),
+              )
+              .toList(),
+          onChanged: (value) {
+            if (value == null) return;
+            txProv.setMetodePembayaran(value);
+            if (value != 'TUNAI') {
+              bayarController.text = txProv.totalBelanja.toStringAsFixed(0);
+            }
+          },
+        ),
+        const SizedBox(height: 10),
         TextField(
           controller: bayarController,
+          enabled: txProv.metodePembayaran == 'TUNAI',
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
-            labelText: 'Uang Pembayaran (Rp)',
+            labelText: txProv.metodePembayaran == 'TUNAI'
+                ? 'Uang Pembayaran (Rp)'
+                : 'Nominal otomatis mengikuti total',
             prefixIcon: Icon(
               Icons.payments_outlined,
               color: AppTheme.primaryTeal,
@@ -643,45 +673,47 @@ class _PaymentPanel extends StatelessWidget {
             txProv.setBayar(doubleVal);
           },
         ),
-        const SizedBox(height: 8),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              OutlinedButton(
-                onPressed: txProv.totalBelanja > 0
-                    ? () => onPreset(txProv.totalBelanja, txProv)
-                    : null,
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
+        if (txProv.metodePembayaran == 'TUNAI') ...[
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                OutlinedButton(
+                  onPressed: txProv.totalBelanja > 0
+                      ? () => onPreset(txProv.totalBelanja, txProv)
+                      : null,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
                   ),
+                  child: const Text('Uang Pas', style: TextStyle(fontSize: 11)),
                 ),
-                child: const Text('Uang Pas', style: TextStyle(fontSize: 11)),
-              ),
-              const SizedBox(width: 6),
-              ...[10000, 20000, 50000, 100000].map(
-                (amt) => Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: OutlinedButton(
-                    onPressed: () => onPreset(amt.toDouble(), txProv),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 7,
+                const SizedBox(width: 6),
+                ...[10000, 20000, 50000, 100000].map(
+                  (amt) => Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: OutlinedButton(
+                      onPressed: () => onPreset(amt.toDouble(), txProv),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
+                      ),
+                      child: Text(
+                        currencyFormatter.format(amt),
+                        style: const TextStyle(fontSize: 11),
                       ),
                     ),
-                    child: Text(
-                      currencyFormatter.format(amt),
-                      style: const TextStyle(fontSize: 11),
-                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: 10),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -717,11 +749,11 @@ class _PaymentPanel extends StatelessWidget {
             ),
             onPressed: canCheckout ? onCheckout : null,
             icon: txProv.isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(
-                      color: Colors.white,
+                      color: Theme.of(context).colorScheme.onPrimary,
                       strokeWidth: 2,
                     ),
                   )

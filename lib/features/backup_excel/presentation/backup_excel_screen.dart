@@ -1,11 +1,17 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import 'package:firdan_farma_windows/application/providers/app_provider.dart';
+import 'package:firdan_farma_windows/application/providers/laporan_provider.dart';
 import 'package:firdan_farma_windows/application/providers/obat_provider.dart';
+import 'package:firdan_farma_windows/application/providers/pembelian_provider.dart';
+import 'package:firdan_farma_windows/application/providers/stok_provider.dart';
+import 'package:firdan_farma_windows/application/providers/transaksi_provider.dart';
+import 'package:firdan_farma_windows/core/theme/app_theme.dart';
 import 'package:firdan_farma_windows/data/services/backup_service.dart';
 import 'package:firdan_farma_windows/data/services/spreadsheet_service.dart';
-import 'package:firdan_farma_windows/core/theme/app_theme.dart';
 import 'package:firdan_farma_windows/shared/widgets/app_page.dart';
 
 class BackupExcelScreen extends StatefulWidget {
@@ -20,121 +26,35 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
   final SpreadsheetService _spreadsheetService = SpreadsheetService();
 
   bool _isProcessing = false;
+  bool _replaceCatalog = false;
   String? _selectedImportFilePath;
   ImportResult? _lastImportResult;
 
-  // ──────────────────────────────────────────────
-  // BACKUP DATABASE (.db)
-  // ──────────────────────────────────────────────
-
-  Future<void> _handleExportDatabase() async {
-    setState(() => _isProcessing = true);
-    try {
-      final savedPath = await _backupService.exportDatabase();
-      if (savedPath != null && mounted) {
-        _showSuccess('Backup database berhasil disimpan:\n$savedPath');
-      } else if (mounted) {
-        _showInfo('Ekspor dibatalkan.');
-      }
-    } catch (e) {
-      if (mounted) _showError('Gagal ekspor database: ${e.toString()}');
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
-  Future<void> _handleImportDatabase() async {
-    final path = await _backupService.pickBackupFile();
-    if (path == null || !mounted) return;
-
-    final messenger = ScaffoldMessenger.of(context);
-    final obatProv = Provider.of<ObatProvider>(context, listen: false);
-
-    final confirm = await _showConfirmDialog(
-      title: 'Konfirmasi Restore Database',
-      content:
-          'Restore database akan MENIMPA SELURUH data saat ini dengan data dari file backup.\n\nTindakan ini tidak dapat dibatalkan. Lanjutkan?',
-      confirmLabel: 'Ya, Restore Sekarang',
-      isDanger: true,
-    );
-    if (confirm != true) return;
-
-    setState(() => _isProcessing = true);
-    try {
-      final success = await _backupService.importDatabase(path);
-      if (success && mounted) {
-        await obatProv.fetchObat();
-        messenger.showSnackBar(
-          SnackBar(
-            content: const Text('Database berhasil dipulihkan dari backup!'),
-            backgroundColor: AppTheme.successGreen,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) _showError('Gagal restore: ${e.toString()}');
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
-  // ──────────────────────────────────────────────
-  // EXCEL — EXPORT
-  // ──────────────────────────────────────────────
-
-  Future<void> _handleExportExcel() async {
-    setState(() => _isProcessing = true);
-    final appProv = Provider.of<AppProvider>(context, listen: false);
-    try {
-      final path = await _spreadsheetService.exportDatabaseToSpreadsheet();
-      if (path != null && mounted) {
-        appProv.updateSpreadsheetPath(path);
-        _showSuccess('Data obat berhasil diekspor ke:\n$path');
-      } else if (mounted) {
-        _showInfo('Ekspor dibatalkan.');
-      }
-    } catch (e) {
-      if (mounted) _showError('Gagal ekspor Excel: ${e.toString()}');
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
-  Future<void> _handleDownloadTemplate() async {
-    setState(() => _isProcessing = true);
-    try {
-      final path = await _spreadsheetService.downloadTemplateExcel();
-      if (path != null && mounted) {
-        _showSuccess('Template berhasil disimpan di:\n$path');
-      } else if (mounted) {
-        _showInfo('Download template dibatalkan.');
-      }
-    } catch (e) {
-      if (mounted) _showError('Gagal download template: ${e.toString()}');
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
-
-  // ──────────────────────────────────────────────
-  // EXCEL — IMPORT (2 langkah: pilih file → jalankan)
-  // ──────────────────────────────────────────────
-
   Future<void> _handlePickImportFile() async {
     final path = await _spreadsheetService.pickSpreadsheetFile();
-    if (path != null && mounted) {
-      setState(() {
-        _selectedImportFilePath = path;
-        _lastImportResult = null;
-      });
-    }
+    if (!mounted || path == null) return;
+    setState(() {
+      _selectedImportFilePath = path;
+      _lastImportResult = null;
+    });
   }
 
   Future<void> _handleRunImport() async {
-    if (_selectedImportFilePath == null) return;
+    final path = _selectedImportFilePath;
+    if (path == null || _isProcessing) return;
+    final obatProvider = Provider.of<ObatProvider>(context, listen: false);
+    final appProvider = Provider.of<AppProvider>(context, listen: false);
 
-    final obatProv = Provider.of<ObatProvider>(context, listen: false);
-    final appProv = Provider.of<AppProvider>(context, listen: false);
+    if (_replaceCatalog) {
+      final confirmed = await _showConfirmDialog(
+        title: 'Ganti isi katalog?',
+        content:
+            'Data yang tidak ada di file baru akan diarsipkan dari katalog aktif. Riwayat transaksi dan stok tetap aman.',
+        confirmLabel: 'Ganti Katalog',
+        isDanger: true,
+      );
+      if (confirmed != true) return;
+    }
 
     setState(() {
       _isProcessing = true;
@@ -143,78 +63,218 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
 
     try {
       final result = await _spreadsheetService.importSpreadsheetToDb(
-        _selectedImportFilePath!,
+        path,
+        replaceCatalog: _replaceCatalog,
       );
+      if (!mounted) return;
 
-      if (mounted) {
-        // Jika ada error fatal (0 data berhasil diproses), jangan update path
-        if (result.total > 0 || result.inserted > 0) {
-          appProv.updateSpreadsheetPath(_selectedImportFilePath);
-        }
-        await obatProv.fetchObat();
-        setState(() => _lastImportResult = result);
-        await _showImportResultDialog(result, appProv);
-      }
-    } on Object catch (e) {
-      if (mounted) _showError('Gagal impor Excel: ${e.toString()}');
+      await obatProvider.fetchObat();
+      await obatProvider.fetchDashboardSummary();
+      if (!mounted) return;
+      setState(() => _lastImportResult = result);
+      await _showImportResultDialog(result, appProvider);
+    } on Object catch (error) {
+      if (mounted) _showError('Impor gagal: ${_cleanError(error)}');
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
   }
 
-  // ──────────────────────────────────────────────
-  // DIALOGS & SNACKBARS
-  // ──────────────────────────────────────────────
-
-  void _showSuccess(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: AppTheme.successGreen,
-        duration: const Duration(seconds: 5),
-      ),
-    );
+  Future<void> _handleExportExcel() async {
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
+    try {
+      final path = await _spreadsheetService.exportDatabaseToSpreadsheet();
+      if (!mounted) return;
+      if (path == null) {
+        _showInfo('Ekspor dibatalkan.');
+      } else {
+        _showSuccess('Excel berhasil disimpan.');
+      }
+    } on Object catch (error) {
+      if (mounted) _showError('Ekspor gagal: ${_cleanError(error)}');
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
   }
 
-  void _showError(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: AppTheme.dangerRed,
-        duration: const Duration(seconds: 6),
-      ),
-    );
+  Future<void> _handleDownloadTemplate() async {
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
+    try {
+      final path = await _spreadsheetService.downloadTemplateExcel();
+      if (!mounted) return;
+      path == null
+          ? _showInfo('Download template dibatalkan.')
+          : _showSuccess('Template Excel berhasil disimpan.');
+    } on Object catch (error) {
+      if (mounted) _showError('Template gagal dibuat: ${_cleanError(error)}');
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
   }
 
-  void _showInfo(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: AppTheme.textSecondary),
+  Future<void> _handleExportDatabase() async {
+    if (_isProcessing) return;
+    setState(() => _isProcessing = true);
+    try {
+      final path = await _backupService.exportDatabase();
+      if (!mounted) return;
+      path == null
+          ? _showInfo('Backup dibatalkan.')
+          : _showSuccess('Backup database berhasil disimpan.');
+    } on Object catch (error) {
+      if (mounted) _showError('Backup gagal: ${_cleanError(error)}');
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _handleImportDatabase() async {
+    if (_isProcessing) return;
+    final obatProvider = Provider.of<ObatProvider>(context, listen: false);
+    final path = await _backupService.pickBackupFile();
+    if (!mounted || path == null) return;
+    final confirmed = await _showConfirmDialog(
+      title: 'Pulihkan database?',
+      content:
+          'Database saat ini akan diganti dengan file backup. Aplikasi membuat salinan otomatis sebelum proses dimulai.',
+      confirmLabel: 'Pulihkan',
+      isDanger: true,
     );
+    if (confirmed != true) return;
+
+    setState(() => _isProcessing = true);
+    try {
+      final success = await _backupService.importDatabase(path);
+      if (success) {
+        await obatProvider.fetchObat();
+        await obatProvider.fetchDashboardSummary();
+        if (mounted) _showSuccess('Database berhasil dipulihkan.');
+      }
+    } on Object catch (error) {
+      if (mounted) _showError('Restore gagal: ${_cleanError(error)}');
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<void> _handleResetOperationalData() async {
+    if (_isProcessing) return;
+    final confirmed = await _showResetConfirmationDialog();
+    if (!mounted || !confirmed) return;
+
+    final obatProvider = Provider.of<ObatProvider>(context, listen: false);
+    final stokProvider = Provider.of<StokProvider>(context, listen: false);
+    final transaksiProvider = Provider.of<TransaksiProvider>(
+      context,
+      listen: false,
+    );
+    final pembelianProvider = Provider.of<PembelianProvider>(
+      context,
+      listen: false,
+    );
+    final laporanProvider = Provider.of<LaporanProvider>(
+      context,
+      listen: false,
+    );
+
+    setState(() => _isProcessing = true);
+    try {
+      final backupPath = await _backupService.resetOperationalData();
+      transaksiProvider.clearCart();
+      pembelianProvider.clearCart();
+      await Future.wait([
+        obatProvider.fetchObat(),
+        obatProvider.fetchDashboardSummary(),
+        stokProvider.fetchMutasi(),
+        transaksiProvider.fetchHistory(),
+        pembelianProvider.fetchPembelian(),
+        pembelianProvider.fetchSummary(),
+        laporanProvider.fetchLaporan(),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _selectedImportFilePath = null;
+        _lastImportResult = null;
+      });
+      _showSuccess('Data operasional direset. Backup: $backupPath');
+    } on Object catch (error) {
+      if (mounted) _showError('Reset dibatalkan: ${_cleanError(error)}');
+    } finally {
+      if (mounted) setState(() => _isProcessing = false);
+    }
+  }
+
+  Future<bool> _showResetConfirmationDialog() async {
+    final controller = TextEditingController();
+    var matches = false;
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Reset Data Operasional'),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Tindakan ini menghapus obat, stok, transaksi, pembelian, dan data laporan turunan. Kategori dan supplier tetap tersedia. Backup database dibuat otomatis sebelum reset.',
+                ),
+                const SizedBox(height: 16),
+                const Text('Ketik RESET DATA untuk melanjutkan.'),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration: const InputDecoration(hintText: 'RESET DATA'),
+                  onChanged: (value) => setDialogState(
+                    () => matches = value.trim() == 'RESET DATA',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.dangerRed,
+              ),
+              onPressed: matches
+                  ? () => Navigator.pop(dialogContext, true)
+                  : null,
+              icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+              label: const Text('Backup dan Reset'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    return result ?? false;
   }
 
   Future<bool?> _showConfirmDialog({
     required String title,
     required String content,
-    String confirmLabel = 'Lanjutkan',
+    required String confirmLabel,
     bool isDanger = false,
   }) {
     return showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        content: Text(
-          content,
-          style: const TextStyle(fontSize: 13, height: 1.5),
-        ),
+      builder: (dialogContext) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Batal'),
           ),
           ElevatedButton(
@@ -223,7 +283,7 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
                   ? AppTheme.dangerRed
                   : AppTheme.primaryTeal,
             ),
-            onPressed: () => Navigator.pop(ctx, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             child: Text(confirmLabel),
           ),
         ],
@@ -233,787 +293,515 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
 
   Future<void> _showImportResultDialog(
     ImportResult result,
-    AppProvider appProv,
+    AppProvider appProvider,
   ) async {
     if (!mounted) return;
-    await showDialog(
+    await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
+      builder: (dialogContext) => AlertDialog(
         title: Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppTheme.successGreen.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-              ),
-              child: Icon(
-                Icons.check_circle_rounded,
-                color: AppTheme.successGreen,
-                size: 26,
-              ),
+            Icon(
+              result.hasErrors
+                  ? Icons.info_outline_rounded
+                  : Icons.check_circle_rounded,
+              color: result.hasErrors
+                  ? AppTheme.warningOrange
+                  : AppTheme.successGreen,
             ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'Import Selesai!',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('Impor selesai')),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Ringkasan statistik
-            _buildResultStatRow(
-              Icons.add_circle_outline,
-              AppTheme.successGreen,
-              '${result.inserted} obat baru ditambahkan',
-            ),
-            const SizedBox(height: 8),
-            _buildResultStatRow(
-              Icons.update,
-              AppTheme.primaryTeal,
-              '${result.updated} obat diperbarui',
-            ),
-            if (result.skipped > 0) ...[
-              const SizedBox(height: 8),
-              _buildResultStatRow(
-                Icons.skip_next,
-                AppTheme.warningOrange,
-                '${result.skipped} baris dilewati (kosong/error)',
-              ),
-            ],
-            if (result.errors.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Divider(),
-              Text(
-                'Detail Error:',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  color: AppTheme.dangerRed,
+        content: SizedBox(
+          width: 420,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _resultLine(
+                  Icons.add_circle_outline,
+                  AppTheme.successGreen,
+                  '${result.inserted} data baru',
                 ),
-              ),
-              const SizedBox(height: 6),
-              Container(
-                constraints: const BoxConstraints(maxHeight: 120),
-                decoration: BoxDecoration(
-                  color: AppTheme.dangerBg,
-                  borderRadius: BorderRadius.circular(8),
+                _resultLine(
+                  Icons.sync_rounded,
+                  AppTheme.primaryTeal,
+                  '${result.updated} data diperbarui',
                 ),
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(8),
-                  child: Text(
-                    result.errors.join('\n'),
-                    style: TextStyle(fontSize: 11, color: AppTheme.dangerRed),
+                if (result.archived > 0)
+                  _resultLine(
+                    Icons.archive_outlined,
+                    AppTheme.warningOrange,
+                    '${result.archived} data lama diarsipkan',
                   ),
-                ),
-              ),
-            ],
-            const SizedBox(height: 12),
-            if (result.total > 0)
-              Text(
-                'Total ${result.total} data obat berhasil dimuat ke katalog!',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-          ],
+                if (result.skipped > 0)
+                  _resultLine(
+                    Icons.remove_circle_outline,
+                    AppTheme.textSecondary,
+                    '${result.skipped} baris dilewati',
+                  ),
+                if (result.errors.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'Perlu diperiksa',
+                    style: TextStyle(
+                      color: AppTheme.dangerRed,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 140),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.dangerBg,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    ),
+                    child: SingleChildScrollView(
+                      child: Text(
+                        result.errors.join('\n'),
+                        style: TextStyle(
+                          color: AppTheme.dangerRed,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text('Tutup'),
           ),
           if (result.total > 0)
             ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryTeal,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
               onPressed: () {
-                Navigator.pop(ctx);
-                appProv.setNavIndex(2);
+                Navigator.pop(dialogContext);
+                appProvider.setNavIndex(2);
               },
-              icon: const Icon(Icons.medication_outlined, size: 18),
-              label: const Text('Lihat Katalog Obat'),
+              icon: const Icon(Icons.medication_outlined, size: 17),
+              label: const Text('Katalog'),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildResultStatRow(IconData icon, Color color, String label) {
-    return Row(
-      children: [
-        Icon(icon, color: color, size: 18),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: color,
-            fontWeight: FontWeight.w500,
+  Widget _resultLine(IconData icon, Color color, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(text, style: TextStyle(color: color)),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  // ──────────────────────────────────────────────
-  // BUILD
-  // ──────────────────────────────────────────────
+  String _cleanError(Object error) =>
+      error.toString().replaceFirst('Exception: ', '').trim();
+
+  void _showSuccess(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(text), backgroundColor: AppTheme.successGreen),
+    );
+  }
+
+  void _showError(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(text), backgroundColor: AppTheme.dangerRed),
+    );
+  }
+
+  void _showInfo(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<AppProvider>(
-      builder: (context, appProv, _) {
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final isCompact = constraints.maxWidth < 900;
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
+    return Consumer<ObatProvider>(
+      builder: (context, obatProvider, _) {
+        return AppPage(
+          title: 'Data, Impor & Backup',
+          subtitle:
+              'SQLite adalah data utama; Excel hanya diproses saat Anda memilih aksi',
+          icon: Icons.table_chart_outlined,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 1180;
+              return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Page Header ──
-                  const AppPageHeader(
-                    title: 'Backup dan Excel',
-                    subtitle: 'Ekspor, impor, dan pulihkan data apotek lokal',
-                    icon: Icons.cloud_sync_rounded,
-                  ),
-
                   if (_isProcessing) ...[
-                    const SizedBox(height: 16),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        color: AppTheme.primaryTeal,
-                        backgroundColor: AppTheme.primaryTealLight,
-                        minHeight: 4,
-                      ),
+                    LinearProgressIndicator(
+                      minHeight: 3,
+                      color: AppTheme.primaryTeal,
+                      backgroundColor: AppTheme.primaryTealLight,
                     ),
-                    const SizedBox(height: 4),
-                    Center(
-                      child: Text(
-                        'Sedang memproses, harap tunggu...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ),
+                    const SizedBox(height: 12),
                   ],
-
-                  const SizedBox(height: 24),
-
-                  if (isCompact)
-                    Column(
+                  if (isWide)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildExcelImportCard(),
-                        const SizedBox(height: 20),
-                        _buildExcelExportCard(appProv),
-                        const SizedBox(height: 20),
-                        _buildDatabaseBackupCard(),
+                        Expanded(child: _buildImportPanel()),
+                        const SizedBox(width: 14),
+                        Expanded(child: _buildExportPanel(obatProvider)),
                       ],
                     )
                   else
                     Column(
                       children: [
-                        // Baris atas: Import & Export Excel (berdampingan)
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(child: _buildExcelImportCard()),
-                            const SizedBox(width: 20),
-                            Expanded(child: _buildExcelExportCard(appProv)),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        // Baris bawah: Database Backup (full width)
-                        _buildDatabaseBackupCard(),
+                        _buildImportPanel(),
+                        const SizedBox(height: 14),
+                        _buildExportPanel(obatProvider),
                       ],
                     ),
+                  const SizedBox(height: 14),
+                  _buildDatabasePanel(),
+                  const SizedBox(height: 14),
+                  _buildAdminPanel(),
                 ],
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
   }
 
-  // ──────────────────────────────────────────────
-  // CARD: Import Excel
-  // ──────────────────────────────────────────────
+  Widget _buildImportPanel() {
+    final path = _selectedImportFilePath;
+    final fileName = path == null ? null : File(path).uri.pathSegments.last;
+    final hasFile = path != null;
 
-  Widget _buildExcelImportCard() {
-    final hasFile = _selectedImportFilePath != null;
-    final fileName = hasFile
-        ? _selectedImportFilePath!.split(Platform.pathSeparator).last
-        : null;
-
-    return _buildCard(
+    return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header card
-          _buildCardHeader(
+          _PanelTitle(
             icon: Icons.upload_file_rounded,
-            color: AppTheme.emeraldGreen,
-            title: 'Import Data Obat dari Excel',
-            subtitle: 'Upload file .xlsx untuk memasukkan data ke katalog',
+            color: AppTheme.primaryTeal,
+            title: 'Impor atau ganti Excel',
+            subtitle: 'Header kolom dibaca otomatis dari file .xlsx',
           ),
-          const SizedBox(height: 20),
-
-          // Step 1: Pilih file
-          _buildStepLabel('1', 'Pilih File Excel dari Komputer'),
-          const SizedBox(height: 8),
-          GestureDetector(
+          const SizedBox(height: 16),
+          InkWell(
             onTap: _isProcessing ? null : _handlePickImportFile,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            child: Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: hasFile
-                    ? AppTheme.emeraldGreen.withValues(alpha: 0.06)
-                    : AppTheme.bgLight,
+                    ? AppTheme.primaryTealLight.withValues(alpha: 0.5)
+                    : AppTheme.bgSubtle,
                 borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                 border: Border.all(
-                  color: hasFile ? AppTheme.emeraldGreen : AppTheme.borderLight,
-                  width: hasFile ? 1.5 : 1,
-                  style: hasFile ? BorderStyle.solid : BorderStyle.solid,
+                  color: hasFile ? AppTheme.primaryTeal : AppTheme.borderLight,
                 ),
               ),
-              child: hasFile
-                  ? Row(
-                      children: [
-                        Icon(
-                          Icons.insert_drive_file_rounded,
-                          color: AppTheme.emeraldGreen,
-                          size: 28,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                fileName ?? '',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13,
-                                  color: AppTheme.textPrimary,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'File dipilih — klik untuk ganti',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: AppTheme.textMuted,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          Icons.check_circle,
-                          color: AppTheme.emeraldGreen,
-                          size: 20,
-                        ),
-                      ],
-                    )
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.folder_open_rounded,
-                          color: AppTheme.textMuted,
-                          size: 24,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          'Klik untuk memilih file .xlsx',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // Step 2: Jalankan import
-          _buildStepLabel('2', 'Jalankan Import'),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: hasFile
-                    ? AppTheme.emeraldGreen
-                    : AppTheme.textMuted,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                ),
-              ),
-              onPressed: (hasFile && !_isProcessing) ? _handleRunImport : null,
-              icon: const Icon(Icons.play_arrow_rounded, size: 20),
-              label: Text(
-                hasFile ? 'Mulai Import Data Obat' : 'Pilih file dahulu',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ),
-
-          // Tampilkan ringkasan hasil import terakhir
-          if (_lastImportResult != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.successBg,
-                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                border: Border.all(
-                  color: AppTheme.successGreen.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Column(
+              child: Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.check_circle,
-                        color: AppTheme.successGreen,
-                        size: 18,
+                  Icon(
+                    hasFile
+                        ? Icons.description_outlined
+                        : Icons.folder_open_outlined,
+                    color: hasFile
+                        ? AppTheme.primaryTeal
+                        : AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      fileName ?? 'Pilih file Excel dari komputer',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
                       ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Import selesai: ${_lastImportResult!.inserted} ditambah, ${_lastImportResult!.updated} diperbarui',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.successGreen,
-                        ),
-                      ),
-                    ],
+                    ),
+                  ),
+                  Icon(
+                    hasFile ? Icons.check_circle : Icons.chevron_right,
+                    color: hasFile ? AppTheme.successGreen : AppTheme.textMuted,
                   ),
                 ],
               ),
             ),
-          ],
-
-          const SizedBox(height: 16),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-
-          // Info format Excel
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryTealLight.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          ),
+          const SizedBox(height: 10),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            value: _replaceCatalog,
+            onChanged: _isProcessing
+                ? null
+                : (value) => setState(() => _replaceCatalog = value),
+            title: Text(
+              'Ganti isi katalog',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline_rounded,
-                      size: 15,
-                      color: AppTheme.primaryTeal,
-                    ),
-                    SizedBox(width: 6),
-                    Text(
-                      'Format Excel yang Didukung:',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.primaryTeal,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '• Format: .xlsx (Excel 2007+) — bukan .xls format lama\n'
-                  '• Header kolom bebas: sistem mendeteksi otomatis\n'
-                  '• Kolom wajib: ada kolom "Nama Obat" atau "Nama"\n'
-                  '• Kolom lain (Harga, Stok, Kode) bersifat opsional\n'
-                  '• Kode obat kosong = digenerate otomatis',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: AppTheme.primaryTeal,
-                    height: 1.6,
-                  ),
-                ),
-              ],
+            subtitle: Text(
+              'Arsipkan data lama yang tidak ada di file baru',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
             ),
           ),
-
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedButton.icon(
+                onPressed: hasFile && !_isProcessing ? _handleRunImport : null,
+                icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                label: Text(hasFile ? 'Impor sekarang' : 'Pilih file dulu'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _isProcessing ? null : _handlePickImportFile,
+                icon: const Icon(Icons.folder_open_outlined, size: 17),
+                label: Text(hasFile ? 'Ganti file' : 'Pilih file'),
+              ),
+            ],
+          ),
+          if (_lastImportResult != null) ...[
+            const SizedBox(height: 12),
+            _ImportSummary(result: _lastImportResult!),
+          ],
           const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.primaryTeal,
-                side: BorderSide(color: AppTheme.primaryTeal),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                ),
-              ),
-              onPressed: _isProcessing ? null : _handleDownloadTemplate,
-              icon: const Icon(Icons.download_rounded, size: 16),
-              label: const Text(
-                'Download Template Excel',
-                style: TextStyle(fontSize: 13),
-              ),
+          Text(
+            'Bisa membaca nama kolom Indonesia/Inggris, judul tambahan, angka Rp, titik, atau koma.',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 11,
+              height: 1.4,
             ),
+          ),
+          const SizedBox(height: 10),
+          TextButton.icon(
+            onPressed: _isProcessing ? null : _handleDownloadTemplate,
+            icon: const Icon(Icons.download_outlined, size: 17),
+            label: const Text('Unduh template contoh'),
           ),
         ],
       ),
     );
   }
 
-  // ──────────────────────────────────────────────
-  // CARD: Export Excel
-  // ──────────────────────────────────────────────
-
-  Widget _buildExcelExportCard(AppProvider appProv) {
-    return Consumer<ObatProvider>(
-      builder: (context, obatProv, _) {
-        final jumlahObat = obatProv.obatList.length;
-        return _buildCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildCardHeader(
-                icon: Icons.file_download_rounded,
-                color: AppTheme.primaryTeal,
-                title: 'Ekspor Katalog Obat ke Excel',
-                subtitle: 'Unduh seluruh data obat sebagai file .xlsx',
-              ),
-              const SizedBox(height: 20),
-
-              // Info jumlah obat
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      AppTheme.primaryTeal.withValues(alpha: 0.08),
-                      AppTheme.emeraldGreen.withValues(alpha: 0.06),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                  border: Border.all(
-                    color: AppTheme.primaryTeal.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.medication_outlined,
-                      color: AppTheme.primaryTeal,
-                      size: 28,
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '$jumlahObat Obat',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.primaryTeal,
-                          ),
-                        ),
-                        Text(
-                          'siap diekspor dari katalog',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Tombol ekspor utama
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryTeal,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    ),
-                  ),
-                  onPressed: _isProcessing ? null : _handleExportExcel,
-                  icon: const Icon(Icons.save_alt_rounded, size: 20),
-                  label: const Text(
-                    'Ekspor ke Excel (Pilih Lokasi Simpan)',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-
-              // Status spreadsheet terakhir
-              if (appProv.connectedSpreadsheetPath != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.successBg,
-                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    border: Border.all(
-                      color: AppTheme.successGreen.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.link_rounded,
-                        color: AppTheme.successGreen,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Terakhir: ${appProv.connectedSpreadsheetPath!.split(Platform.pathSeparator).last}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppTheme.successGreen,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-
-              const SizedBox(height: 4),
-
-              // Navigasi ke katalog
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.primaryTeal,
-                    side: BorderSide(color: AppTheme.primaryTeal),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    ),
-                  ),
-                  onPressed: () => appProv.setNavIndex(2),
-                  icon: const Icon(Icons.medication_outlined, size: 16),
-                  label: const Text(
-                    'Lihat Katalog Obat',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-              const Divider(height: 1),
-              const SizedBox(height: 12),
-
-              // Info kolom yang diekspor
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.bgLight,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.table_chart_outlined,
-                          size: 14,
-                          color: AppTheme.textSecondary,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'Kolom yang diekspor:',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: [
-                        for (final col in [
-                          'ID',
-                          'Kode Obat',
-                          'Nama Obat',
-                          'Kategori',
-                          'Supplier',
-                          'Harga Beli',
-                          'Harga Jual',
-                          'Stok Tersedia',
-                          'Stok Minimal',
-                          'Deskripsi',
-                        ])
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryTealLight,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              col,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: AppTheme.primaryTeal,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  // ──────────────────────────────────────────────
-  // CARD: Database Backup
-  // ──────────────────────────────────────────────
-
-  Widget _buildDatabaseBackupCard() {
-    return _buildCard(
+  Widget _buildExportPanel(ObatProvider obatProvider) {
+    return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildCardHeader(
-            icon: Icons.sd_storage_outlined,
-            color: const Color(0xFF6366F1),
-            title: 'Backup Database Lokal (.db)',
-            subtitle: 'Simpan atau pulihkan seluruh database sistem apotek',
+          _PanelTitle(
+            icon: Icons.file_download_outlined,
+            color: AppTheme.successGreen,
+            title: 'Ekspor katalog',
+            subtitle: 'Simpan data aktif dengan format yang siap dibaca ulang',
           ),
-          const SizedBox(height: 16),
-          Text(
-            'Backup menyimpan SEMUA data: obat, transaksi, stok, kategori, dan supplier. '
-            'File .db dapat dipindahkan ke komputer lain atau disimpan sebagai arsip.',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppTheme.textSecondary,
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6366F1),
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    ),
-                  ),
-                  onPressed: _isProcessing ? null : _handleExportDatabase,
-                  icon: const Icon(Icons.download_rounded, size: 18),
-                  label: const Text(
-                    'Ekspor Backup (.db)',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF6366F1),
-                    side: const BorderSide(color: Color(0xFF6366F1)),
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    ),
-                  ),
-                  onPressed: _isProcessing ? null : _handleImportDatabase,
-                  icon: const Icon(Icons.upload_file_rounded, size: 18),
-                  label: const Text(
-                    'Restore Database',
-                    style: TextStyle(fontSize: 13),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 18),
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: AppTheme.warningBg,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: AppTheme.warningOrange.withValues(alpha: 0.3),
-              ),
+              color: AppTheme.successBg,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
             ),
             child: Row(
               children: [
                 Icon(
-                  Icons.warning_amber_rounded,
-                  color: AppTheme.warningOrange,
-                  size: 16,
+                  Icons.medication_outlined,
+                  color: AppTheme.successGreen,
+                  size: 26,
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Restore database akan MENIMPA semua data yang ada. Pastikan Anda sudah backup terlebih dahulu!',
+                    '${obatProvider.obatList.length} obat aktif siap diekspor',
                     style: TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.warningOrange,
+                      color: AppTheme.successGreen,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isProcessing ? null : _handleExportExcel,
+              icon: const Icon(Icons.save_alt_outlined, size: 18),
+              label: const Text('Ekspor ke Excel'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => Provider.of<AppProvider>(
+                context,
+                listen: false,
+              ).setNavIndex(2),
+              icon: const Icon(Icons.medication_outlined, size: 17),
+              label: const Text('Buka katalog obat'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'File ekspor berisi kode, nama, kategori, harga beli, harga jual, stok, dan deskripsi.',
+            style: TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 11,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDatabasePanel() {
+    return _Panel(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final actions = Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ElevatedButton.icon(
+                onPressed: _isProcessing ? null : _handleExportDatabase,
+                icon: const Icon(Icons.download_outlined, size: 17),
+                label: const Text('Backup database'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _isProcessing ? null : _handleImportDatabase,
+                icon: const Icon(Icons.restore_outlined, size: 17),
+                label: const Text('Restore database'),
+              ),
+            ],
+          );
+          final description = Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.sd_storage_outlined, color: AppTheme.indigo, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Backup database lokal',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Untuk memindahkan atau memulihkan seluruh data aplikasi.',
+                      style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+          if (constraints.maxWidth < 700) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [description, const SizedBox(height: 12), actions],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: description),
+              const SizedBox(width: 16),
+              actions,
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildAdminPanel() {
+    return _Panel(
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(top: 8),
+        leading: Icon(
+          Icons.admin_panel_settings_outlined,
+          color: AppTheme.dangerRed,
+        ),
+        title: Text(
+          'Area Admin',
+          style: TextStyle(
+            color: AppTheme.textPrimary,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        subtitle: Text(
+          'Peralatan pemeliharaan database untuk pengembangan atau instalasi baru',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+        ),
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppTheme.dangerBg,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              border: Border.all(
+                color: AppTheme.dangerRed.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 14,
+              runSpacing: 12,
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 620),
+                  child: Text(
+                    'Reset mengosongkan data operasional satu kali. Aplikasi tidak pernah mereset data saat startup atau pergantian hari.',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
                       height: 1.4,
                     ),
                   ),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.dangerRed,
+                  ),
+                  onPressed: _isProcessing ? null : _handleResetOperationalData,
+                  icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                  label: const Text('Reset Data Operasional'),
                 ),
               ],
             ),
@@ -1022,64 +810,86 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
       ),
     );
   }
+}
 
-  // ──────────────────────────────────────────────
-  // SHARED WIDGETS
-  // ──────────────────────────────────────────────
+class _Panel extends StatelessWidget {
+  final Widget child;
 
-  Widget _buildCard({required Widget child}) {
+  const _Panel({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.cardBg,
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         border: Border.all(color: AppTheme.borderLight),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.025),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+            color: Theme.of(context).colorScheme.shadow.withValues(
+              alpha: AppTheme.isDark ? 0.28 : 0.08,
+            ),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(20),
       child: child,
     );
   }
+}
 
-  Widget _buildCardHeader({
-    required IconData icon,
-    required Color color,
-    required String title,
-    required String subtitle,
-  }) {
+class _PanelTitle extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String subtitle;
+
+  const _PanelTitle({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          width: 38,
+          height: 38,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
+            color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           ),
-          child: Icon(icon, color: color, size: 22),
+          child: Icon(icon, color: color, size: 20),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w800,
                   color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 15,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               Text(
                 subtitle,
-                style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
               ),
             ],
           ),
@@ -1087,37 +897,50 @@ class _BackupExcelScreenState extends State<BackupExcelScreen> {
       ],
     );
   }
+}
 
-  Widget _buildStepLabel(String step, String label) {
-    return Row(
-      children: [
-        Container(
-          width: 22,
-          height: 22,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppTheme.primaryTeal,
-            borderRadius: BorderRadius.circular(6),
+class _ImportSummary extends StatelessWidget {
+  final ImportResult result;
+
+  const _ImportSummary({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = result.hasErrors
+        ? AppTheme.warningOrange
+        : AppTheme.successGreen;
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            result.hasErrors
+                ? Icons.info_outline_rounded
+                : Icons.check_circle_outline,
+            color: color,
+            size: 18,
           ),
-          child: Text(
-            step,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${result.inserted} baru, ${result.updated} diperbarui'
+              '${result.archived > 0 ? ', ${result.archived} diarsipkan' : ''}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textPrimary,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

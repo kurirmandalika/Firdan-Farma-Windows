@@ -4,22 +4,25 @@ import 'package:archive/archive.dart';
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/intl.dart';
 import 'package:firdan_farma_windows/data/models/obat_model.dart';
 import 'package:firdan_farma_windows/data/services/obat_service.dart';
 import 'package:firdan_farma_windows/data/services/kategori_service.dart';
-import 'package:firdan_farma_windows/core/constants/app_constants.dart';
+import 'package:firdan_farma_windows/data/services/laporan_service.dart';
+import 'package:firdan_farma_windows/data/services/stok_service.dart';
 
 /// Hasil detail dari proses import Excel
 class ImportResult {
   final int inserted;
   final int updated;
+  final int archived;
   final int skipped;
   final List<String> errors;
 
   const ImportResult({
     this.inserted = 0,
     this.updated = 0,
+    this.archived = 0,
     this.skipped = 0,
     this.errors = const [],
   });
@@ -31,24 +34,11 @@ class ImportResult {
 class SpreadsheetService {
   final ObatService _obatService = ObatService();
   final KategoriService _kategoriService = KategoriService();
+  final StokService _stokService = StokService();
 
   // ──────────────────────────────────────────────
   // SHARED PREFERENCES
   // ──────────────────────────────────────────────
-
-  Future<String?> getConnectedSpreadsheetPath() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(AppConstants.prefsSpreadsheetPathKey);
-  }
-
-  Future<void> setConnectedSpreadsheetPath(String? path) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (path == null) {
-      await prefs.remove(AppConstants.prefsSpreadsheetPathKey);
-    } else {
-      await prefs.setString(AppConstants.prefsSpreadsheetPathKey, path);
-    }
-  }
 
   // ──────────────────────────────────────────────
   // FILE PICKER — IMPORT
@@ -82,6 +72,7 @@ class SpreadsheetService {
       TextCellValue('ID'),
       TextCellValue('Kode Obat'),
       TextCellValue('Nama Obat'),
+      TextCellValue('Satuan'),
       TextCellValue('Kategori'),
       TextCellValue('Supplier'),
       TextCellValue('Harga Beli'),
@@ -96,6 +87,7 @@ class SpreadsheetService {
         IntCellValue(obat.id ?? 0),
         TextCellValue(obat.kodeObat),
         TextCellValue(obat.nama),
+        TextCellValue(obat.satuan),
         TextCellValue(obat.namaKategori ?? 'Umum'),
         TextCellValue(obat.namaSupplier ?? '-'),
         DoubleCellValue(obat.hargaBeli),
@@ -125,7 +117,6 @@ class SpreadsheetService {
         File(savePath)
           ..createSync(recursive: true)
           ..writeAsBytesSync(fileBytes);
-        await setConnectedSpreadsheetPath(savePath);
         return savePath;
       }
     }
@@ -144,22 +135,22 @@ class SpreadsheetService {
     sheet.appendRow([
       TextCellValue('Kode Obat'),
       TextCellValue('Nama Obat'),
+      TextCellValue('Satuan'),
       TextCellValue('Harga Beli'),
       TextCellValue('Harga Jual'),
-      TextCellValue('Stok Tersedia'),
+      TextCellValue('Stok Awal'),
       TextCellValue('Stok Minimal'),
-      TextCellValue('Satuan'),
       TextCellValue('Deskripsi'),
     ]);
 
     sheet.appendRow([
       TextCellValue('OBT-001'),
       TextCellValue('Contoh Nama Obat'),
+      TextCellValue('STRIP'),
       DoubleCellValue(5000),
       DoubleCellValue(8000),
       IntCellValue(100),
       IntCellValue(10),
-      TextCellValue('Strip'),
       TextCellValue('Deskripsi opsional'),
     ]);
 
@@ -192,11 +183,109 @@ class SpreadsheetService {
   // ✅ Tidak ada null crash — semua path aman (catch Object)
   // ──────────────────────────────────────────────
 
-  Future<ImportResult> importSpreadsheetToDb(String filePath) async {
+  Future<String?> exportReportToSpreadsheet(
+    DateTime dari,
+    DateTime sampai,
+  ) async {
+    final reportService = LaporanService();
+    final results = await Future.wait<Object>([
+      reportService.getRingkasan(dari, sampai),
+      reportService.getMedicinePeriodReports(dari, sampai),
+    ]);
+    final summary = results[0] as LaporanRingkasan;
+    final rows = results[1] as List<MedicinePeriodReport>;
+
+    final excel = Excel.createExcel();
+    final summarySheet = excel['Ringkasan'];
+    final detailSheet = excel['Laporan Obat'];
+    excel.setDefaultSheet('Laporan Obat');
+
+    summarySheet.appendRow([TextCellValue('Laporan Apotek Firdan Farma')]);
+    summarySheet.appendRow([
+      TextCellValue('Periode'),
+      TextCellValue(
+        '${DateFormat('dd MMM yyyy', 'id_ID').format(dari)} - ${DateFormat('dd MMM yyyy', 'id_ID').format(sampai)}',
+      ),
+    ]);
+    summarySheet.appendRow([
+      TextCellValue('Penjualan'),
+      DoubleCellValue(summary.totalPenjualan),
+    ]);
+    summarySheet.appendRow([
+      TextCellValue('Pembelian'),
+      DoubleCellValue(summary.totalPembelian),
+    ]);
+    summarySheet.appendRow([
+      TextCellValue('Laba Kotor'),
+      DoubleCellValue(summary.totalLabaKotor),
+    ]);
+    summarySheet.appendRow([
+      TextCellValue('Jumlah Transaksi'),
+      IntCellValue(summary.totalTransaksi),
+    ]);
+
+    detailSheet.appendRow([
+      TextCellValue('Kode'),
+      TextCellValue('Nama'),
+      TextCellValue('Satuan'),
+      TextCellValue('AWL'),
+      TextCellValue('MSK'),
+      TextCellValue('KLR'),
+      TextCellValue('SISA'),
+      TextCellValue('HB'),
+      TextCellValue('HJ'),
+      TextCellValue('Penjualan'),
+      TextCellValue('Pembelian'),
+      TextCellValue('Laba Kotor'),
+      TextCellValue('Nilai Stok'),
+    ]);
+    for (final row in rows) {
+      detailSheet.appendRow([
+        TextCellValue(row.kodeObat),
+        TextCellValue(row.namaObat),
+        TextCellValue(row.satuan),
+        IntCellValue(row.awl),
+        IntCellValue(row.msk),
+        IntCellValue(row.klr),
+        IntCellValue(row.sisa),
+        DoubleCellValue(row.hargaBeli),
+        DoubleCellValue(row.hargaJual),
+        DoubleCellValue(row.omzet),
+        DoubleCellValue(row.pembelian),
+        DoubleCellValue(row.labaKotor),
+        DoubleCellValue(row.nilaiStokAkhir),
+      ]);
+    }
+
+    final start = DateFormat('yyyy-MM-dd').format(dari);
+    final end = DateFormat('yyyy-MM-dd').format(sampai);
+    final fileName = start == end
+        ? 'Laporan_Harian_$start.xlsx'
+        : 'Laporan_${start}_sd_$end.xlsx';
+    final savePath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Ekspor Laporan dari Database',
+      fileName: fileName,
+      type: FileType.custom,
+      allowedExtensions: ['xlsx'],
+    );
+    if (savePath == null) return null;
+
+    final bytes = excel.save();
+    if (bytes == null) return null;
+    await File(savePath).writeAsBytes(bytes, flush: true);
+    return savePath;
+  }
+
+  Future<ImportResult> importSpreadsheetToDb(
+    String filePath, {
+    bool replaceCatalog = false,
+  }) async {
     int inserted = 0;
     int updated = 0;
+    int archived = 0;
     int skipped = 0;
     final errors = <String>[];
+    final importedCodes = <String>{};
 
     try {
       // ── 1. Validasi ekstensi — .xls tidak didukung package excel ──
@@ -390,8 +479,13 @@ class SpreadsheetService {
             }
 
             // Stok
-            final stok = mapping.stok >= 0 ? _int(row, mapping.stok) : 0;
-            final stokMin = mapping.stokMinimal >= 0
+            final hasStockValue =
+                mapping.stok >= 0 && _str(row, mapping.stok).isNotEmpty;
+            final hasMinStockValue =
+                mapping.stokMinimal >= 0 &&
+                _str(row, mapping.stokMinimal).isNotEmpty;
+            final stok = hasStockValue ? _int(row, mapping.stok) : 0;
+            final stokMin = hasMinStockValue
                 ? _int(row, mapping.stokMinimal, def: 5)
                 : 5;
 
@@ -405,22 +499,28 @@ class SpreadsheetService {
 
             // Cek existing
             final existing = await _obatService.getByKode(kode);
+            importedCodes.add(kode);
             if (existing != null) {
               await _obatService.update(
                 existing.copyWith(
                   nama: nama,
                   hargaBeli: hargaBeli > 0 ? hargaBeli : existing.hargaBeli,
                   hargaJual: hargaJual > 0 ? hargaJual : existing.hargaJual,
-                  stokTersedia: mapping.stok >= 0
-                      ? stok
-                      : existing.stokTersedia,
-                  stokMinimal: mapping.stokMinimal >= 0 && stokMin > 0
+                  stokMinimal: hasMinStockValue && stokMin > 0
                       ? stokMin
                       : existing.stokMinimal,
                   deskripsi: desk.isNotEmpty ? desk : existing.deskripsi,
                   isActive: true,
                 ),
               );
+              if (hasStockValue && existing.id != null) {
+                await _stokService.adjustToPhysicalStock(
+                  obatId: existing.id!,
+                  stokFisik: stok,
+                  alasan: 'IMPORT_XLSX',
+                  catatan: 'Sinkronisasi stok dari import Excel',
+                );
+              }
               updated++;
             } else {
               await _obatService.insert(
@@ -430,7 +530,7 @@ class SpreadsheetService {
                   kategoriId: defaultKategoriId,
                   hargaBeli: hargaBeli,
                   hargaJual: hargaJual,
-                  stokTersedia: stok,
+                  stokTersedia: hasStockValue ? stok : 0,
                   stokMinimal: stokMin > 0 ? stokMin : 5,
                   deskripsi: desk.isNotEmpty ? desk : null,
                   createdAt: DateTime.now().toIso8601String(),
@@ -446,6 +546,10 @@ class SpreadsheetService {
           }
         }
       }
+
+      if (replaceCatalog && inserted + updated > 0) {
+        archived = await _obatService.archiveExceptCodes(importedCodes);
+      }
     } on Object catch (e, st) {
       debugPrint('[Import] Fatal: $e\n$st');
       errors.add('Gagal memproses file: ${e.toString()}');
@@ -454,6 +558,7 @@ class SpreadsheetService {
     return ImportResult(
       inserted: inserted,
       updated: updated,
+      archived: archived,
       skipped: skipped,
       errors: errors,
     );

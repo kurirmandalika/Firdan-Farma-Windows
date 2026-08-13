@@ -49,6 +49,13 @@ dependencies:
   crypto: ^3.0.3
   archive: ^3.6.1
 
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_windows: winsqlite3
+      name: sqlite3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -72,7 +79,7 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/branding/logoapotekk.png
+    - assets/branding/logoapotek.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

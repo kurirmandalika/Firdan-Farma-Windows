@@ -1,8 +1,10 @@
 import 'package:firdan_farma_windows/data/database/database_helper.dart';
 import 'package:firdan_farma_windows/data/models/obat_model.dart';
+import 'package:firdan_farma_windows/data/services/audit_service.dart';
 
 class ObatService {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  final AuditService _auditService = AuditService();
 
   Future<List<Obat>> getAll({
     String? searchQuery,
@@ -99,10 +101,14 @@ class ObatService {
     final db = await _dbHelper.database;
     final now = DateTime.now().toIso8601String();
 
-    return await db.transaction((txn) async {
+    final id = await db.transaction((txn) async {
       final kode = obat.kodeObat.trim().isEmpty
           ? await _generateNextKodeObat(txn)
           : obat.kodeObat.trim().toUpperCase();
+      final awl = _normalizedAwl(obat);
+      final msk = obat.msk;
+      final klr = obat.klr;
+      final stokTersedia = _sisaFromExcelStock(awl: awl, msk: msk, klr: klr);
 
       final id = await txn.insert('obat', {
         'nama': obat.nama.trim(),
@@ -114,25 +120,64 @@ class ObatService {
         'supplier_id': obat.supplierId,
         'harga_beli': obat.hargaBeli,
         'harga_jual': obat.hargaJual,
+        'awl': awl,
+        'msk': msk,
+        'klr': klr,
         'stok_minimal': obat.stokMinimal,
-        'stok_tersedia': obat.stokTersedia,
+        'stok_tersedia': stokTersedia,
         'deskripsi': obat.deskripsi?.trim(),
         'is_active': obat.isActive ? 1 : 0,
         'created_at': obat.createdAt,
         'updated_at': now,
       });
 
-      if (obat.stokTersedia > 0) {
+      var stokBerjalan = 0;
+      if (awl > 0) {
         await txn.insert('stok', {
           'obat_id': id,
           'jenis': 'masuk',
-          'jumlah': obat.stokTersedia,
+          'jumlah': awl,
           'tipe_mutasi': 'SALDO_AWAL',
+          'reference_type': 'obat_crud_excel',
           'harga_beli_snapshot': obat.hargaBeli,
           'stok_sebelum': 0,
-          'stok_sesudah': obat.stokTersedia,
+          'stok_sesudah': awl,
           'alasan': 'SALDO_AWAL',
-          'catatan': 'Stok awal saat obat dibuat',
+          'catatan': 'AWL saat obat dibuat',
+          'tanggal': now,
+          'created_at': now,
+        });
+        stokBerjalan = awl;
+      }
+      if (msk > 0) {
+        await txn.insert('stok', {
+          'obat_id': id,
+          'jenis': 'masuk',
+          'jumlah': msk,
+          'tipe_mutasi': 'STOK_MASUK',
+          'reference_type': 'obat_crud_excel',
+          'harga_beli_snapshot': obat.hargaBeli,
+          'stok_sebelum': stokBerjalan,
+          'stok_sesudah': stokBerjalan + msk,
+          'alasan': 'MSK',
+          'catatan': 'MSK saat obat dibuat',
+          'tanggal': now,
+          'created_at': now,
+        });
+        stokBerjalan += msk;
+      }
+      if (klr > 0) {
+        await txn.insert('stok', {
+          'obat_id': id,
+          'jenis': 'keluar',
+          'jumlah': klr,
+          'tipe_mutasi': 'PENJUALAN',
+          'reference_type': 'obat_crud_excel',
+          'harga_beli_snapshot': obat.hargaBeli,
+          'stok_sebelum': stokBerjalan,
+          'stok_sesudah': stokBerjalan - klr,
+          'alasan': 'KLR',
+          'catatan': 'KLR saat obat dibuat',
           'tanggal': now,
           'created_at': now,
         });
@@ -140,12 +185,23 @@ class ObatService {
 
       return id;
     });
+    await _auditService.log(
+      aksi: 'OBAT_TAMBAH',
+      entitas: 'OBAT',
+      entitasId: id,
+      detail: '${obat.nama} | ${obat.kodeObat}',
+    );
+    return id;
   }
 
   Future<int> update(Obat obat) async {
     final db = await _dbHelper.database;
     final now = DateTime.now().toIso8601String();
-    return await db.update(
+    final awl = _normalizedAwl(obat);
+    final msk = obat.msk;
+    final klr = obat.klr;
+    final stokTersedia = _sisaFromExcelStock(awl: awl, msk: msk, klr: klr);
+    final changed = await db.update(
       'obat',
       {
         'nama': obat.nama.trim(),
@@ -157,7 +213,11 @@ class ObatService {
         'supplier_id': obat.supplierId,
         'harga_beli': obat.hargaBeli,
         'harga_jual': obat.hargaJual,
+        'awl': awl,
+        'msk': msk,
+        'klr': klr,
         'stok_minimal': obat.stokMinimal,
+        'stok_tersedia': stokTersedia,
         'deskripsi': obat.deskripsi?.trim(),
         'is_active': obat.isActive ? 1 : 0,
         'updated_at': now,
@@ -165,6 +225,15 @@ class ObatService {
       where: 'id = ?',
       whereArgs: [obat.id],
     );
+    if (changed > 0) {
+      await _auditService.log(
+        aksi: 'OBAT_UBAH',
+        entitas: 'OBAT',
+        entitasId: obat.id,
+        detail: '${obat.nama} | ${obat.kodeObat}',
+      );
+    }
+    return changed;
   }
 
   Future<String> _generateNextKodeObat(dynamic executor) async {
@@ -178,6 +247,28 @@ class ObatService {
       if (digits != null) next = (int.tryParse(digits) ?? 0) + 1;
     }
     return 'OBT${next.toString().padLeft(6, '0')}';
+  }
+
+  int _normalizedAwl(Obat obat) {
+    if (obat.awl == 0 &&
+        obat.msk == 0 &&
+        obat.klr == 0 &&
+        obat.stokTersedia > 0) {
+      return obat.stokTersedia;
+    }
+    return obat.awl;
+  }
+
+  int _sisaFromExcelStock({
+    required int awl,
+    required int msk,
+    required int klr,
+  }) {
+    final sisa = awl + msk - klr;
+    if (awl < 0 || msk < 0 || klr < 0 || sisa < 0) {
+      throw Exception('AWL/MSK/KLR tidak valid. SISA tidak boleh negatif.');
+    }
+    return sisa;
   }
 
   Future<int> delete(int id) async {
@@ -194,28 +285,50 @@ class ObatService {
     final txCount = txMaps.first['count'] as int? ?? 0;
     final stokCount = stokMaps.first['count'] as int? ?? 0;
 
+    late final int changed;
+    late final String action;
     if (txCount > 0 || stokCount > 0) {
       // Soft delete
-      return await db.update(
+      changed = await db.update(
         'obat',
         {'is_active': 0, 'updated_at': DateTime.now().toIso8601String()},
         where: 'id = ?',
         whereArgs: [id],
       );
+      action = 'OBAT_NONAKTIF';
     } else {
       // Hard delete
-      return await db.delete('obat', where: 'id = ?', whereArgs: [id]);
+      changed = await db.delete('obat', where: 'id = ?', whereArgs: [id]);
+      action = 'OBAT_HAPUS';
     }
+    if (changed > 0) {
+      await _auditService.log(
+        aksi: action,
+        entitas: 'OBAT',
+        entitasId: id,
+        detail: 'Perubahan status katalog obat',
+      );
+    }
+    return changed;
   }
 
   Future<int> reactivate(int id) async {
     final db = await _dbHelper.database;
-    return await db.update(
+    final changed = await db.update(
       'obat',
       {'is_active': 1, 'updated_at': DateTime.now().toIso8601String()},
       where: 'id = ?',
       whereArgs: [id],
     );
+    if (changed > 0) {
+      await _auditService.log(
+        aksi: 'OBAT_AKTIFKAN',
+        entitas: 'OBAT',
+        entitasId: id,
+        detail: 'Obat diaktifkan kembali',
+      );
+    }
+    return changed;
   }
 
   /// Archives active medicines that are not present in a replacement import.

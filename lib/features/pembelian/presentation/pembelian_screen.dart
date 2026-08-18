@@ -316,6 +316,10 @@ class _PembelianScreenState extends State<PembelianScreen> {
                       pembelianProv.updateQty(item.obat.id!, qty),
                   onHargaChanged: (harga) =>
                       pembelianProv.updateHargaBeli(item.obat.id!, harga),
+                  onBatchChanged: (batch) =>
+                      pembelianProv.updateBatch(item.obat.id!, batch),
+                  onExpiredChanged: (expired) =>
+                      pembelianProv.updateExpiredDate(item.obat.id!, expired),
                   onRemove: () => pembelianProv.removeFromCart(item.obat.id!),
                 );
               },
@@ -482,6 +486,8 @@ class _PurchaseItemRow extends StatefulWidget {
   final NumberFormat currencyFormatter;
   final ValueChanged<int> onQtyChanged;
   final ValueChanged<double> onHargaChanged;
+  final ValueChanged<String?> onBatchChanged;
+  final ValueChanged<String?> onExpiredChanged;
   final VoidCallback onRemove;
 
   const _PurchaseItemRow({
@@ -489,6 +495,8 @@ class _PurchaseItemRow extends StatefulWidget {
     required this.currencyFormatter,
     required this.onQtyChanged,
     required this.onHargaChanged,
+    required this.onBatchChanged,
+    required this.onExpiredChanged,
     required this.onRemove,
   });
 
@@ -499,6 +507,8 @@ class _PurchaseItemRow extends StatefulWidget {
 class _PurchaseItemRowState extends State<_PurchaseItemRow> {
   late final TextEditingController _qtyController;
   late final TextEditingController _hargaController;
+  late final TextEditingController _batchController;
+  late final TextEditingController _expiredController;
 
   @override
   void initState() {
@@ -506,6 +516,10 @@ class _PurchaseItemRowState extends State<_PurchaseItemRow> {
     _qtyController = TextEditingController(text: widget.item.qty.toString());
     _hargaController = TextEditingController(
       text: widget.item.hargaBeli.toStringAsFixed(0),
+    );
+    _batchController = TextEditingController(text: widget.item.batchNo ?? '');
+    _expiredController = TextEditingController(
+      text: widget.item.expiredDate ?? '',
     );
   }
 
@@ -518,12 +532,20 @@ class _PurchaseItemRowState extends State<_PurchaseItemRow> {
     if (oldWidget.item.hargaBeli != widget.item.hargaBeli) {
       _hargaController.text = widget.item.hargaBeli.toStringAsFixed(0);
     }
+    if (oldWidget.item.batchNo != widget.item.batchNo) {
+      _batchController.text = widget.item.batchNo ?? '';
+    }
+    if (oldWidget.item.expiredDate != widget.item.expiredDate) {
+      _expiredController.text = widget.item.expiredDate ?? '';
+    }
   }
 
   @override
   void dispose() {
     _qtyController.dispose();
     _hargaController.dispose();
+    _batchController.dispose();
+    _expiredController.dispose();
     super.dispose();
   }
 
@@ -553,7 +575,10 @@ class _PurchaseItemRowState extends State<_PurchaseItemRow> {
             ],
           );
 
-          final controls = Row(
+          final controls = Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               SizedBox(
                 width: 76,
@@ -581,7 +606,30 @@ class _PurchaseItemRowState extends State<_PurchaseItemRow> {
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(
+              SizedBox(
+                width: 118,
+                child: TextField(
+                  controller: _batchController,
+                  decoration: const InputDecoration(labelText: 'No Batch'),
+                  onChanged: widget.onBatchChanged,
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 118,
+                child: TextField(
+                  controller: _expiredController,
+                  decoration: const InputDecoration(
+                    labelText: 'Expired (YYYY-MM-DD)',
+                  ),
+                  onChanged: (value) => widget.onExpiredChanged(
+                    value.trim().isEmpty ? null : value.trim(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 112,
                 child: Text(
                   widget.currencyFormatter.format(widget.item.subtotal),
                   textAlign: TextAlign.right,

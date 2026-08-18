@@ -1,4 +1,7 @@
 import 'package:firdan_farma_windows/data/database/database_helper.dart';
+import 'package:firdan_farma_windows/data/models/audit_log_model.dart';
+import 'package:firdan_farma_windows/data/models/stok_model.dart';
+import 'package:firdan_farma_windows/data/services/audit_service.dart';
 
 class LaporanRingkasan {
   final double totalPenjualan;
@@ -74,8 +77,23 @@ class ObatTerlarisItem {
   });
 }
 
+class SalesPaymentSummary {
+  final String metodePembayaran;
+  final String kodePrefix;
+  final int jumlahTransaksi;
+  final double total;
+
+  const SalesPaymentSummary({
+    required this.metodePembayaran,
+    required this.kodePrefix,
+    required this.jumlahTransaksi,
+    required this.total,
+  });
+}
+
 class LaporanService {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  final AuditService _auditService = AuditService();
 
   Future<LaporanRingkasan> getRingkasan(DateTime dari, DateTime sampai) async {
     final db = await _dbHelper.database;
@@ -85,7 +103,8 @@ class LaporanService {
       '''
       SELECT COUNT(*) as total_tx, COALESCE(SUM(total), 0) as sum_total, COALESCE(SUM(jumlah_item), 0) as sum_item
       FROM transaksi
-      WHERE tanggal >= ? AND tanggal < ?
+      WHERE date(COALESCE(laporan_tanggal, tanggal)) >= date(?)
+        AND date(COALESCE(laporan_tanggal, tanggal)) < date(?)
     ''',
       [bounds.startIso, bounds.endExclusiveIso],
     );
@@ -104,7 +123,8 @@ class LaporanService {
       FROM detail_transaksi d
       JOIN transaksi t ON d.transaksi_id = t.id
       LEFT JOIN obat o ON d.obat_id = o.id
-      WHERE t.tanggal >= ? AND t.tanggal < ?
+      WHERE date(COALESCE(t.laporan_tanggal, t.tanggal)) >= date(?)
+        AND date(COALESCE(t.laporan_tanggal, t.tanggal)) < date(?)
     ''',
       [bounds.startIso, bounds.endExclusiveIso],
     );
@@ -162,35 +182,9 @@ class LaporanService {
         COALESCE(o.satuan, 'PCS') AS satuan,
         COALESCE(o.harga_beli, 0) AS harga_beli,
         COALESCE(o.harga_jual, 0) AS harga_jual,
-        COALESCE((
-          SELECT SUM(CASE WHEN s.jenis = 'masuk' THEN s.jumlah ELSE -s.jumlah END)
-          FROM stok s
-          WHERE s.obat_id = o.id AND s.tanggal < ?
-        ), 0) + COALESCE((
-          SELECT SUM(s.jumlah)
-          FROM stok s
-          WHERE s.obat_id = o.id
-            AND s.tipe_mutasi = 'SALDO_AWAL'
-            AND s.tanggal >= ?
-            AND s.tanggal < ?
-        ), 0) AS awl,
-        COALESCE((
-          SELECT SUM(s.jumlah)
-          FROM stok s
-          WHERE s.obat_id = o.id
-            AND s.jenis = 'masuk'
-            AND s.tipe_mutasi <> 'SALDO_AWAL'
-            AND s.tanggal >= ?
-            AND s.tanggal < ?
-        ), 0) AS msk,
-        COALESCE((
-          SELECT SUM(s.jumlah)
-          FROM stok s
-          WHERE s.obat_id = o.id
-            AND s.tipe_mutasi = 'PENJUALAN'
-            AND s.tanggal >= ?
-            AND s.tanggal < ?
-        ), 0) AS klr,
+        COALESCE(o.awl, 0) AS awl,
+        COALESCE(o.msk, 0) AS msk,
+        COALESCE(o.klr, 0) AS klr,
         COALESCE((
           SELECT SUM(s.jumlah)
           FROM stok s
@@ -209,16 +203,14 @@ class LaporanService {
             AND s.tanggal >= ?
             AND s.tanggal < ?
         ), 0) AS penyesuaian_keluar,
-        COALESCE((
-          SELECT SUM(CASE WHEN s.jenis = 'masuk' THEN s.jumlah ELSE -s.jumlah END)
-          FROM stok s
-          WHERE s.obat_id = o.id AND s.tanggal < ?
-        ), 0) AS sisa,
+        COALESCE(o.stok_tersedia, 0) AS sisa,
         COALESCE((
           SELECT SUM(d.subtotal)
           FROM detail_transaksi d
           JOIN transaksi t ON d.transaksi_id = t.id
-          WHERE d.obat_id = o.id AND t.tanggal >= ? AND t.tanggal < ?
+          WHERE d.obat_id = o.id
+            AND date(COALESCE(t.laporan_tanggal, t.tanggal)) >= date(?)
+            AND date(COALESCE(t.laporan_tanggal, t.tanggal)) < date(?)
         ), 0) AS omzet,
         COALESCE((
           SELECT SUM(dp.subtotal)
@@ -230,13 +222,17 @@ class LaporanService {
           SELECT SUM(COALESCE(d.subtotal_modal, COALESCE(d.harga_modal_satuan, o.harga_beli, 0) * d.jumlah))
           FROM detail_transaksi d
           JOIN transaksi t ON d.transaksi_id = t.id
-          WHERE d.obat_id = o.id AND t.tanggal >= ? AND t.tanggal < ?
+          WHERE d.obat_id = o.id
+            AND date(COALESCE(t.laporan_tanggal, t.tanggal)) >= date(?)
+            AND date(COALESCE(t.laporan_tanggal, t.tanggal)) < date(?)
         ), 0) AS modal_terjual,
         COALESCE((
           SELECT SUM(COALESCE(d.laba_kotor, d.subtotal - COALESCE(d.subtotal_modal, COALESCE(d.harga_modal_satuan, o.harga_beli, 0) * d.jumlah)))
           FROM detail_transaksi d
           JOIN transaksi t ON d.transaksi_id = t.id
-          WHERE d.obat_id = o.id AND t.tanggal >= ? AND t.tanggal < ?
+          WHERE d.obat_id = o.id
+            AND date(COALESCE(t.laporan_tanggal, t.tanggal)) >= date(?)
+            AND date(COALESCE(t.laporan_tanggal, t.tanggal)) < date(?)
         ), 0) AS laba_kotor
       FROM obat o
       WHERE o.is_active = 1
@@ -247,22 +243,16 @@ class LaporanService {
          OR EXISTS (
             SELECT 1 FROM detail_transaksi d
             JOIN transaksi t ON d.transaksi_id = t.id
-            WHERE d.obat_id = o.id AND t.tanggal >= ? AND t.tanggal < ?
+            WHERE d.obat_id = o.id
+              AND date(COALESCE(t.laporan_tanggal, t.tanggal)) >= date(?)
+              AND date(COALESCE(t.laporan_tanggal, t.tanggal)) < date(?)
          )
       ORDER BY o.nama ASC
       ''',
       [
         bounds.startIso,
-        bounds.startIso,
         bounds.endExclusiveIso,
         bounds.startIso,
-        bounds.endExclusiveIso,
-        bounds.startIso,
-        bounds.endExclusiveIso,
-        bounds.startIso,
-        bounds.endExclusiveIso,
-        bounds.startIso,
-        bounds.endExclusiveIso,
         bounds.endExclusiveIso,
         bounds.startIso,
         bounds.endExclusiveIso,
@@ -319,7 +309,8 @@ class LaporanService {
       FROM detail_transaksi d
       JOIN transaksi t ON d.transaksi_id = t.id
       LEFT JOIN obat o ON d.obat_id = o.id
-      WHERE t.tanggal >= ? AND t.tanggal < ?
+      WHERE date(COALESCE(t.laporan_tanggal, t.tanggal)) >= date(?)
+        AND date(COALESCE(t.laporan_tanggal, t.tanggal)) < date(?)
       GROUP BY d.obat_id
       ORDER BY total_terjual DESC
       LIMIT ?
@@ -339,6 +330,93 @@ class LaporanService {
           ),
         )
         .toList();
+  }
+
+  Future<List<SalesPaymentSummary>> getPaymentSummaries(
+    DateTime dari,
+    DateTime sampai,
+  ) async {
+    final db = await _dbHelper.database;
+    final bounds = _dateBounds(dari, sampai);
+    final rows = await db.rawQuery(
+      '''
+      SELECT metode_pembayaran, COUNT(*) AS jumlah_transaksi,
+             COALESCE(SUM(total), 0) AS total
+      FROM transaksi
+      WHERE date(COALESCE(laporan_tanggal, tanggal)) >= date(?)
+        AND date(COALESCE(laporan_tanggal, tanggal)) < date(?)
+      GROUP BY metode_pembayaran
+      ORDER BY metode_pembayaran ASC
+      ''',
+      [bounds.startIso, bounds.endExclusiveIso],
+    );
+    return rows
+        .map(
+          (row) => SalesPaymentSummary(
+            metodePembayaran: row['metode_pembayaran'] as String? ?? 'LAINNYA',
+            kodePrefix: _paymentPrefix(
+              row['metode_pembayaran'] as String? ?? '',
+            ),
+            jumlahTransaksi: (row['jumlah_transaksi'] as num?)?.toInt() ?? 0,
+            total: (row['total'] as num?)?.toDouble() ?? 0,
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<StokMutasi>> getStockCard(int obatId, {int limit = 500}) async {
+    final db = await _dbHelper.database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT s.*, o.nama AS nama_obat, o.kode_obat AS kode_obat,
+             COALESCE(o.satuan, 'PCS') AS satuan
+      FROM stok s
+      LEFT JOIN obat o ON s.obat_id = o.id
+      WHERE s.obat_id = ?
+      ORDER BY s.tanggal ASC, s.id ASC
+      LIMIT ?
+      ''',
+      [obatId, limit],
+    );
+    return rows.map(StokMutasi.fromMap).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getExpiringBatches({int days = 90}) async {
+    final db = await _dbHelper.database;
+    final until = DateTime.now()
+        .add(Duration(days: days))
+        .toIso8601String()
+        .substring(0, 10);
+    return db.rawQuery(
+      '''
+      SELECT b.*, o.nama AS nama_obat, o.kode_obat AS kode_obat,
+             s.nama AS nama_supplier
+      FROM stok_batch b
+      JOIN obat o ON b.obat_id = o.id
+      LEFT JOIN supplier s ON b.supplier_id = s.id
+      WHERE b.stok_sisa > 0 AND b.expired_date IS NOT NULL
+        AND date(b.expired_date) <= date(?)
+      ORDER BY date(b.expired_date) ASC, o.nama ASC
+      ''',
+      [until],
+    );
+  }
+
+  Future<List<AuditLog>> getActivityLogs({int limit = 300}) {
+    return _auditService.getAll(limit: limit);
+  }
+
+  String _paymentPrefix(String method) {
+    switch (method.toUpperCase()) {
+      case 'TUNAI':
+        return 'T';
+      case 'QRIS':
+        return 'Q';
+      case 'TRANSFER':
+        return 'B';
+      default:
+        return 'L';
+    }
   }
 
   _ReportBounds _dateBounds(DateTime dari, DateTime sampai) {

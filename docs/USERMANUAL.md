@@ -7,9 +7,11 @@ atau laporan.
 ## 1. Memulai Aplikasi
 
 1. Buka aplikasi dan tunggu status sistem siap.
-2. Klik layar pembuka untuk masuk.
-3. Masukkan atau buat PIN jika diminta.
-4. Pada database baru, dashboard dan katalog obat akan kosong.
+2. Masuk dengan username dan password.
+3. Akun awal: `admin1` / `admin123` sebagai Super Admin atau `karyawan` /
+   `karyawan123` sebagai Karyawan.
+4. Masukkan atau buat PIN jika diminta.
+5. Pada database baru, dashboard dan katalog obat akan kosong.
 
 Data tidak direset ketika aplikasi ditutup, dibuka kembali, atau ketika tanggal
 berganti.
@@ -43,7 +45,8 @@ Untuk pembelian resmi dari supplier:
 1. Buka menu **Pembelian**.
 2. Isi tanggal, supplier, nomor faktur, dan item.
 3. Atur jumlah serta harga beli.
-4. Simpan pembelian.
+4. Isi nomor batch dan expired date untuk setiap obat bila tersedia dari supplier.
+5. Simpan pembelian.
 
 Stok dan harga beli saat ini diperbarui dalam satu transaksi database.
 
@@ -68,10 +71,16 @@ Penjualan hanya dicatat melalui menu Kasir.
 3. Atur jumlah item.
 4. Pilih metode pembayaran: Tunai, QRIS, Transfer, atau Lainnya.
 5. Untuk tunai, isi nominal pembayaran.
-6. Selesaikan transaksi.
+6. Sebelum disimpan, jawab pertanyaan diskon. Jika ya, isi nominal diskon.
+7. Selesaikan transaksi dan cetak struk.
 
 Aplikasi memvalidasi stok, menyimpan transaksi dan detail harga, mengurangi
-stok, serta membuat riwayat `PENJUALAN` secara atomik.
+stok, serta membuat riwayat `PENJUALAN` secara atomik. Penjualan menggunakan
+batch dengan expired terdekat terlebih dahulu. Kode laporan tunai memakai `T1`,
+`T2`, dan seterusnya; QRIS memakai `Q1`, `Q2`, dan seterusnya.
+
+Laporan penjualan ditutup pukul 15.00. Transaksi mulai pukul 15.00 masuk tanggal
+laporan hari berikutnya.
 
 ## 7. Laporan Otomatis
 
@@ -86,6 +95,13 @@ Kolom laporan obat:
 - `SISA`: saldo stok sampai akhir periode.
 - `HB` dan `HJ`: harga beli dan jual saat ini.
 - Penjualan, Pembelian, Laba Kotor, dan Nilai Stok.
+
+Laporan juga menampilkan ringkasan terpisah Tunai dan QRIS. Super Admin dapat
+melihat audit detail aksi pengguna pada halaman laporan. Karyawan hanya melihat
+informasi operasional umum.
+
+Menu **Pengguna** hanya dapat digunakan Super Admin untuk menyesuaikan username,
+password, nama tampilan, role, dan status akun.
 
 Klik **Ekspor Excel** untuk membuat file laporan dari data SQLite pada periode
 yang sedang dipilih.

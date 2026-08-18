@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firdan_farma_windows/data/models/audit_log_model.dart';
 import 'package:firdan_farma_windows/data/services/laporan_service.dart';
 
 class LaporanProvider extends ChangeNotifier {
@@ -19,26 +20,45 @@ class LaporanProvider extends ChangeNotifier {
   List<MedicinePeriodReport> _medicineReports = [];
   List<MedicinePeriodReport> get medicineReports => _medicineReports;
 
+  List<SalesPaymentSummary> _paymentSummaries = [];
+  List<SalesPaymentSummary> get paymentSummaries => _paymentSummaries;
+
+  List<AuditLog> _activityLogs = [];
+  List<AuditLog> get activityLogs => _activityLogs;
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
 
   Future<void> fetchLaporan() async {
+    if (_disposed) return;
     _isLoading = true;
     notifyListeners();
 
     try {
       _ringkasan = await _service.getRingkasan(_dariTanggal, _sampaiTanggal);
+      if (_disposed) return;
       final results = await Future.wait([
         _service.getObatTerlaris(_dariTanggal, _sampaiTanggal, limit: 5),
         _service.getMedicinePeriodReports(_dariTanggal, _sampaiTanggal),
+        _service.getPaymentSummaries(_dariTanggal, _sampaiTanggal),
       ]);
       _obatTerlaris = results[0] as List<ObatTerlarisItem>;
       _medicineReports = results[1] as List<MedicinePeriodReport>;
+      _paymentSummaries = results[2] as List<SalesPaymentSummary>;
+      _activityLogs = await _service.getActivityLogs(limit: 100);
+      if (_disposed) return;
     } catch (e) {
       debugPrint('Error fetchLaporan: $e');
     } finally {
       _isLoading = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 

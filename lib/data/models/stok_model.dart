@@ -11,6 +11,11 @@ class StokMutasi {
   final int? stokSesudah;
   final String? alasan;
   final String? catatan;
+  final String? kodeTransaksi;
+  final String? batchNo;
+  final String? expiredDate;
+  final int? userId;
+  final String? usernameSnapshot;
   final String tanggal;
   final String? createdAt;
 
@@ -32,6 +37,11 @@ class StokMutasi {
     this.stokSesudah,
     this.alasan,
     this.catatan,
+    this.kodeTransaksi,
+    this.batchNo,
+    this.expiredDate,
+    this.userId,
+    this.usernameSnapshot,
     required this.tanggal,
     this.createdAt,
     this.namaObat,
@@ -56,6 +66,11 @@ class StokMutasi {
       stokSesudah: map['stok_sesudah'] as int?,
       alasan: map['alasan'] as String?,
       catatan: map['catatan'] as String?,
+      kodeTransaksi: map['kode_transaksi'] as String?,
+      batchNo: map['batch_no'] as String?,
+      expiredDate: map['expired_date'] as String?,
+      userId: map['user_id'] as int?,
+      usernameSnapshot: map['username_snapshot'] as String?,
       tanggal: map['tanggal'] as String,
       createdAt: map['created_at'] as String?,
       namaObat: map['nama_obat'] as String? ?? '(Obat telah dihapus)',
@@ -78,6 +93,11 @@ class StokMutasi {
       'stok_sesudah': stokSesudah,
       'alasan': alasan,
       'catatan': catatan,
+      'kode_transaksi': kodeTransaksi,
+      'batch_no': batchNo,
+      'expired_date': expiredDate,
+      'user_id': userId,
+      'username_snapshot': usernameSnapshot,
       'tanggal': tanggal,
       'created_at': createdAt,
     };

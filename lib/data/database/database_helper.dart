@@ -6,7 +6,7 @@ import 'package:firdan_farma_windows/core/constants/app_constants.dart';
 
 class DatabaseHelper {
   static const dbFileName = AppConstants.databaseFileName;
-  static const schemaVersion = 5;
+  static const schemaVersion = 7;
 
   static final DatabaseHelper instance = DatabaseHelper._internal();
   static Database? _database;
@@ -145,6 +145,12 @@ class DatabaseHelper {
     if (oldVersion < 5) {
       await _migrateToV5(db);
     }
+    if (oldVersion < 6) {
+      await _migrateToV6(db);
+    }
+    if (oldVersion < 7) {
+      await _migrateToV7(db);
+    }
     await _createIndexes(db);
   }
 
@@ -176,6 +182,9 @@ class DatabaseHelper {
         supplier_id INTEGER,
         harga_beli REAL NOT NULL,
         harga_jual REAL NOT NULL,
+        awl INTEGER NOT NULL DEFAULT 0,
+        msk INTEGER NOT NULL DEFAULT 0,
+        klr INTEGER NOT NULL DEFAULT 0,
         stok_minimal INTEGER NOT NULL DEFAULT 5,
         stok_tersedia INTEGER NOT NULL DEFAULT 0,
         deskripsi TEXT,
@@ -201,6 +210,11 @@ class DatabaseHelper {
         stok_sesudah INTEGER,
         alasan TEXT,
         catatan TEXT,
+        kode_transaksi TEXT,
+        batch_no TEXT,
+        expired_date TEXT,
+        user_id INTEGER,
+        username_snapshot TEXT,
         tanggal TEXT NOT NULL,
         created_at TEXT,
         FOREIGN KEY (obat_id) REFERENCES obat(id)
@@ -216,7 +230,14 @@ class DatabaseHelper {
         kembali REAL NOT NULL,
         metode_pembayaran TEXT NOT NULL DEFAULT 'TUNAI',
         tanggal TEXT NOT NULL,
-        jumlah_item INTEGER NOT NULL DEFAULT 0
+        jumlah_item INTEGER NOT NULL DEFAULT 0,
+        total_sebelum_diskon REAL NOT NULL DEFAULT 0,
+        diskon REAL NOT NULL DEFAULT 0,
+        diberi_diskon INTEGER NOT NULL DEFAULT 0,
+        laporan_tanggal TEXT,
+        kode_laporan TEXT,
+        user_id INTEGER,
+        username_snapshot TEXT
       )
     ''');
 
@@ -239,6 +260,8 @@ class DatabaseHelper {
     ''');
 
     await _createPurchaseTables(db);
+    await _createUserTables(db);
+    await _createBatchTable(db);
 
     await _createIndexes(db);
 
@@ -343,6 +366,78 @@ class DatabaseHelper {
     await _addColumnIfMissing(db, 'stok', 'alasan TEXT');
   }
 
+  Future<void> _migrateToV6(Database db) async {
+    await _addColumnIfMissing(db, 'obat', 'awl INTEGER NOT NULL DEFAULT 0');
+    await _addColumnIfMissing(db, 'obat', 'msk INTEGER NOT NULL DEFAULT 0');
+    await _addColumnIfMissing(db, 'obat', 'klr INTEGER NOT NULL DEFAULT 0');
+
+    await db.execute('''
+      UPDATE obat
+      SET awl = COALESCE((
+            SELECT SUM(s.jumlah)
+            FROM stok s
+            WHERE s.obat_id = obat.id
+              AND s.jenis = 'masuk'
+              AND s.tipe_mutasi = 'SALDO_AWAL'
+          ), 0),
+          msk = COALESCE((
+            SELECT SUM(s.jumlah)
+            FROM stok s
+            WHERE s.obat_id = obat.id
+              AND s.jenis = 'masuk'
+              AND s.tipe_mutasi <> 'SALDO_AWAL'
+          ), 0),
+          klr = COALESCE((
+            SELECT SUM(s.jumlah)
+            FROM stok s
+            WHERE s.obat_id = obat.id
+              AND s.jenis = 'keluar'
+          ), 0)
+    ''');
+
+    await db.execute('''
+      UPDATE obat
+      SET awl = stok_tersedia
+      WHERE awl = 0 AND msk = 0 AND klr = 0 AND stok_tersedia > 0
+    ''');
+  }
+
+  Future<void> _migrateToV7(Database db) async {
+    await _addColumnIfMissing(
+      db,
+      'transaksi',
+      'total_sebelum_diskon REAL NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'transaksi',
+      'diskon REAL NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(
+      db,
+      'transaksi',
+      'diberi_diskon INTEGER NOT NULL DEFAULT 0',
+    );
+    await _addColumnIfMissing(db, 'transaksi', 'laporan_tanggal TEXT');
+    await _addColumnIfMissing(db, 'transaksi', 'kode_laporan TEXT');
+    await _addColumnIfMissing(db, 'transaksi', 'user_id INTEGER');
+    await _addColumnIfMissing(db, 'transaksi', 'username_snapshot TEXT');
+
+    await _addColumnIfMissing(db, 'stok', 'kode_transaksi TEXT');
+    await _addColumnIfMissing(db, 'stok', 'batch_no TEXT');
+    await _addColumnIfMissing(db, 'stok', 'expired_date TEXT');
+    await _addColumnIfMissing(db, 'stok', 'user_id INTEGER');
+    await _addColumnIfMissing(db, 'stok', 'username_snapshot TEXT');
+
+    await _addColumnIfMissing(db, 'pembelian', 'user_id INTEGER');
+    await _addColumnIfMissing(db, 'pembelian', 'username_snapshot TEXT');
+    await _addColumnIfMissing(db, 'detail_pembelian', 'batch_no TEXT');
+    await _addColumnIfMissing(db, 'detail_pembelian', 'expired_date TEXT');
+
+    await _createUserTables(db);
+    await _createBatchTable(db);
+  }
+
   Future<void> _addColumnIfMissing(
     Database db,
     String table,
@@ -368,6 +463,8 @@ class DatabaseHelper {
         diskon REAL NOT NULL DEFAULT 0,
         total REAL NOT NULL DEFAULT 0,
         catatan TEXT,
+        user_id INTEGER,
+        username_snapshot TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT,
         FOREIGN KEY (supplier_id) REFERENCES supplier(id)
@@ -382,9 +479,63 @@ class DatabaseHelper {
         qty INTEGER NOT NULL,
         harga_beli REAL NOT NULL,
         subtotal REAL NOT NULL,
+        batch_no TEXT,
+        expired_date TEXT,
         created_at TEXT NOT NULL,
         FOREIGN KEY (pembelian_id) REFERENCES pembelian(id),
         FOREIGN KEY (obat_id) REFERENCES obat(id)
+      )
+    ''');
+  }
+
+  Future<void> _createUserTables(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pengguna (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        password_hash TEXT NOT NULL,
+        nama_tampilan TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'KARYAWAN',
+        is_active INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL,
+        updated_at TEXT
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        username_snapshot TEXT,
+        role_snapshot TEXT,
+        aksi TEXT NOT NULL,
+        entitas TEXT NOT NULL,
+        entitas_id INTEGER,
+        metode_pembayaran TEXT,
+        nominal REAL,
+        alasan TEXT,
+        detail TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES pengguna(id)
+      )
+    ''');
+  }
+
+  Future<void> _createBatchTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS stok_batch (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        obat_id INTEGER NOT NULL,
+        batch_no TEXT,
+        expired_date TEXT,
+        qty_masuk INTEGER NOT NULL DEFAULT 0,
+        qty_keluar INTEGER NOT NULL DEFAULT 0,
+        stok_sisa INTEGER NOT NULL DEFAULT 0,
+        supplier_id INTEGER,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        FOREIGN KEY (obat_id) REFERENCES obat(id),
+        FOREIGN KEY (supplier_id) REFERENCES supplier(id)
       )
     ''');
   }
@@ -438,6 +589,24 @@ class DatabaseHelper {
     );
     await db.execute(
       'CREATE INDEX IF NOT EXISTS idx_detail_pembelian_obat ON detail_pembelian(obat_id)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_transaksi_laporan ON transaksi(laporan_tanggal, metode_pembayaran)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_stok_kode_transaksi ON stok(kode_transaksi)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_stok_batch ON stok(obat_id, batch_no)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_batch_expired ON stok_batch(obat_id, expired_date)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at)',
+    );
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id)',
     );
   }
 

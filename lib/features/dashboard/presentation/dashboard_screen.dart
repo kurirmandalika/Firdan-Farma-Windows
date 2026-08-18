@@ -142,7 +142,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   if (isCompact)
                     Column(
                       children: [
-                        _buildLowStockPanel(context, appProv, obatProv),
+                        _buildLowStockPanel(context, obatProv),
                         const SizedBox(height: 18),
                         _buildQuickActionPanel(context, appProv),
                       ],
@@ -153,11 +153,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         Expanded(
                           flex: 6,
-                          child: _buildLowStockPanel(
-                            context,
-                            appProv,
-                            obatProv,
-                          ),
+                          child: _buildLowStockPanel(context, obatProv),
                         ),
                         const SizedBox(width: 18),
                         Expanded(
@@ -175,11 +171,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildLowStockPanel(
-    BuildContext context,
-    AppProvider appProv,
-    ObatProvider obatProv,
-  ) {
+  Widget _buildLowStockPanel(BuildContext context, ObatProvider obatProv) {
     final items = obatProv.lowStockList.take(8).toList();
 
     return MedicalCard(
@@ -190,11 +182,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: Icons.inventory_2_outlined,
             title: 'Pantauan Stok Menipis',
             subtitle: 'Item aktif yang sudah mencapai batas stok minimal',
-            trailing: OutlinedButton.icon(
-              onPressed: () => appProv.setNavIndex(4),
-              icon: const Icon(Icons.swap_vert, size: 16),
-              label: const Text('Mutasi'),
-            ),
           ),
           const SizedBox(height: 16),
           const Divider(),
@@ -311,45 +298,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           const AppSectionHeader(
             icon: Icons.flash_on,
-            title: 'Akses Cepat',
-            subtitle: 'Pindah ke alur kerja yang paling sering dipakai',
+            title: 'Mulai Cepat',
+            subtitle: 'Tiga alur yang paling sering dipakai saat operasional',
           ),
           const SizedBox(height: 16),
           const Divider(),
           _QuickActionTile(
-            label: 'Buka Kasir Penjualan',
-            subtitle: 'Tambah item dan proses pembayaran',
+            label: 'Kasir',
+            subtitle: 'Penjualan dan pembayaran',
             icon: Icons.point_of_sale,
             color: AppTheme.primaryTeal,
             onTap: () => appProv.setNavIndex(1),
           ),
           _QuickActionTile(
-            label: 'Kelola Katalog Obat',
-            subtitle: 'Tambah atau koreksi data produk',
+            label: 'Katalog Obat',
+            subtitle: 'Tambah atau koreksi obat',
             icon: Icons.add_box_outlined,
             color: AppTheme.emeraldGreen,
             onTap: () => appProv.setNavIndex(2),
           ),
           _QuickActionTile(
-            label: 'Catat Pembelian',
-            subtitle: 'Stok datang dari supplier',
-            icon: Icons.shopping_bag_outlined,
-            color: AppTheme.warningOrange,
-            onTap: () => appProv.setNavIndex(3),
-          ),
-          _QuickActionTile(
-            label: 'Lihat Laporan',
-            subtitle: 'Pantau omset dan item terlaris',
+            label: 'Laporan',
+            subtitle: 'Omzet, laba, dan stok',
             icon: Icons.analytics_outlined,
             color: AppTheme.cyanAccent,
             onTap: () => appProv.setNavIndex(6),
-          ),
-          _QuickActionTile(
-            label: 'Backup dan Excel',
-            subtitle: 'Ekspor, impor, atau pulihkan data',
-            icon: Icons.sd_storage_outlined,
-            color: AppTheme.indigo,
-            onTap: () => appProv.setNavIndex(7),
           ),
         ],
       ),

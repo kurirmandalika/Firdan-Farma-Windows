@@ -92,6 +92,50 @@ void main() {
       expect(mapping['stok'], 4);
     });
 
+    test('mendeteksi format stok Firdan Farma dengan header dua baris', () {
+      final rows = <List<dynamic>>[
+        [
+          'No',
+          'Nama Barang',
+          'SATUAN',
+          '',
+          '',
+          '',
+          '',
+          'HargaBeli',
+          'HargaJual',
+        ],
+        [
+          '',
+          '',
+          '',
+          'AWL(stok awal masuk)',
+          'MSK (Pemasukan setiap beli dari supplier)',
+          'KLR (penjualan keluar per harinya)',
+          'SISA',
+          '',
+          '',
+        ],
+        ['1', '2', '3', '4', '5', '6', '7', '8', '9'],
+        ['1', 'ACETON', 'FLES', '1', '', '0', '1', '7665', '10000'],
+        ['2', 'ACID SALICYL', 'GR', '70', '', '0', '70', '2000', '3000'],
+      ];
+
+      final mapping = detectColumnMapping(rows);
+
+      expect(mapping['kode'], -1);
+      expect(mapping['nama'], 1);
+      expect(mapping['satuan'], 2);
+      expect(mapping['awl'], 3);
+      expect(mapping['msk'], 4);
+      expect(mapping['klr'], 5);
+      expect(mapping['stok'], 6);
+      expect(mapping['hargaBeli'], 7);
+      expect(mapping['hargaJual'], 8);
+      expect(mapping['stokMinimal'], -1);
+      expect(mapping['deskripsi'], -1);
+    });
+
     test('tidak menukar harga beli dan harga jual pada header umum', () {
       final rows = <List<dynamic>>[
         ['Nama', 'Modal', 'Harga', 'Qty'],
@@ -193,5 +237,116 @@ void main() {
       expect(importMutations.single['stok_sesudah'], 17);
       expect(importMutations.single['alasan'], 'IMPORT_XLSX');
     });
+
+    test(
+      'import format Firdan Farma memakai SISA dan menyimpan satuan',
+      () async {
+        await DatabaseHelper.openInMemoryForTesting();
+        addTearDown(DatabaseHelper.instance.closeAndReset);
+
+        final tempDir = await Directory.systemTemp.createTemp(
+          'firdan_import_format_test_',
+        );
+        addTearDown(() async {
+          if (await tempDir.exists()) {
+            await tempDir.delete(recursive: true);
+          }
+        });
+
+        final excel = Excel.createExcel();
+        final sheet = excel['Sheet1'];
+        excel.setDefaultSheet('Sheet1');
+        sheet.appendRow([
+          TextCellValue('No'),
+          TextCellValue('Nama Barang'),
+          TextCellValue('SATUAN'),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue('HargaBeli'),
+          TextCellValue('HargaJual'),
+        ]);
+        sheet.appendRow([
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue('AWL(stok awal masuk)'),
+          TextCellValue('MSK (Pemasukan setiap beli dari supplier)'),
+          TextCellValue('KLR (penjualan keluar per harinya)'),
+          TextCellValue('SISA'),
+          TextCellValue(''),
+          TextCellValue(''),
+        ]);
+        sheet.appendRow([
+          TextCellValue('1'),
+          TextCellValue('2'),
+          TextCellValue('3'),
+          TextCellValue('4'),
+          TextCellValue('5'),
+          TextCellValue('6'),
+          TextCellValue('7'),
+          TextCellValue('8'),
+          TextCellValue('9'),
+        ]);
+        sheet.appendRow([
+          IntCellValue(1),
+          TextCellValue('ACETON'),
+          TextCellValue('FLES'),
+          IntCellValue(1),
+          TextCellValue(''),
+          IntCellValue(0),
+          IntCellValue(1),
+          DoubleCellValue(7665),
+          DoubleCellValue(10000),
+        ]);
+        sheet.appendRow([
+          TextCellValue(''),
+          TextCellValue('GRAND TOTAL'),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue(''),
+        ]);
+        sheet.appendRow([
+          TextCellValue(''),
+          TextCellValue('SISA STOK'),
+          TextCellValue('0'),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue(''),
+          TextCellValue(''),
+        ]);
+
+        final file = File('${tempDir.path}${Platform.pathSeparator}obat.xlsx');
+        await file.writeAsBytes(excel.save()!, flush: true);
+
+        final result = await SpreadsheetService().importSpreadsheetToDb(
+          file.path,
+        );
+        final obatList = await ObatService().getAll(includeInactive: true);
+        final aceton = obatList.singleWhere((obat) => obat.nama == 'ACETON');
+
+        expect(result.inserted, 1);
+        expect(result.skipped, 4);
+        expect(obatList.any((obat) => obat.nama == '2'), isFalse);
+        expect(obatList.any((obat) => obat.nama == 'SISA STOK'), isFalse);
+        expect(aceton.kodeObat, 'A-0004');
+        expect(aceton.satuan, 'FLES');
+        expect(aceton.awl, 1);
+        expect(aceton.msk, 0);
+        expect(aceton.klr, 0);
+        expect(aceton.hargaBeli, 7665);
+        expect(aceton.hargaJual, 10000);
+        expect(aceton.stokTersedia, 1);
+        expect(aceton.stokMinimal, 5);
+        expect(aceton.deskripsi, isNull);
+      },
+    );
   });
 }

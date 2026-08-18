@@ -76,6 +76,8 @@ class _StokScreenState extends State<StokScreen> {
   final TextEditingController _jumlahController = TextEditingController();
   final TextEditingController _hargaBeliController = TextEditingController();
   final TextEditingController _catatanController = TextEditingController();
+  final TextEditingController _batchController = TextEditingController();
+  final TextEditingController _expiredController = TextEditingController();
 
   int? _selectedObatId;
   String _selectedJenis = 'masuk';
@@ -103,6 +105,8 @@ class _StokScreenState extends State<StokScreen> {
     _jumlahController.dispose();
     _hargaBeliController.dispose();
     _catatanController.dispose();
+    _batchController.dispose();
+    _expiredController.dispose();
     super.dispose();
   }
 
@@ -153,12 +157,20 @@ class _StokScreenState extends State<StokScreen> {
           catatan: _catatanController.text.trim().isNotEmpty
               ? _catatanController.text.trim()
               : null,
+          batchNo: _batchController.text.trim().isEmpty
+              ? null
+              : _batchController.text.trim(),
+          expiredDate: _expiredController.text.trim().isEmpty
+              ? null
+              : _expiredController.text.trim(),
         );
 
         if (success && mounted) {
           _jumlahController.clear();
           _hargaBeliController.clear();
           _catatanController.clear();
+          _batchController.clear();
+          _expiredController.clear();
           await obatProv.fetchObat();
 
           messenger.showSnackBar(
@@ -388,6 +400,26 @@ class _StokScreenState extends State<StokScreen> {
                 },
               ),
               const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _batchController,
+                      decoration: const InputDecoration(labelText: 'No Batch'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _expiredController,
+                      decoration: const InputDecoration(
+                        labelText: 'Expired (YYYY-MM-DD)',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
             ] else ...[
               DropdownButtonFormField<String>(
                 initialValue: _selectedAlasanKeluar,
@@ -539,6 +571,9 @@ class _StokScreenState extends State<StokScreen> {
                                       Text(
                                         '${(mutasi.alasan ?? mutasi.tipeMutasi).replaceAll('_', ' ')}'
                                         '${mutasi.stokSebelum != null && mutasi.stokSesudah != null ? ' | ${mutasi.stokSebelum} -> ${mutasi.stokSesudah}' : ''}'
+                                        '${mutasi.kodeTransaksi != null ? ' | Kode ${mutasi.kodeTransaksi}' : ''}'
+                                        '${mutasi.batchNo != null ? ' | Batch ${mutasi.batchNo}' : ''}'
+                                        '${mutasi.expiredDate != null ? ' | Exp ${mutasi.expiredDate}' : ''}'
                                         '${mutasi.catatan != null ? ' | ${mutasi.catatan}' : ''}',
                                         style: TextStyle(
                                           fontSize: 11,

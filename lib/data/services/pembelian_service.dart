@@ -2,9 +2,12 @@ import 'package:intl/intl.dart';
 import 'package:firdan_farma_windows/data/database/database_helper.dart';
 import 'package:firdan_farma_windows/data/models/detail_pembelian_model.dart';
 import 'package:firdan_farma_windows/data/models/pembelian_model.dart';
+import 'package:firdan_farma_windows/data/services/audit_service.dart';
+import 'package:firdan_farma_windows/data/services/auth_service.dart';
 
 class PembelianService {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  final AuditService _auditService = AuditService();
 
   Future<String> generateNomorPembelian() async {
     final db = await _dbHelper.database;
@@ -49,7 +52,8 @@ class PembelianService {
     }
     final total = subtotal - diskon;
 
-    return db.transaction((txn) async {
+    final user = AuthSession.currentUser;
+    final saved = await db.transaction((txn) async {
       final pembelianId = await txn.insert('pembelian', {
         'nomor_pembelian': nomor,
         'supplier_id': supplierId,
@@ -61,6 +65,8 @@ class PembelianService {
         'diskon': diskon,
         'total': total,
         'catatan': catatan?.trim().isEmpty == true ? null : catatan?.trim(),
+        'user_id': user?.id,
+        'username_snapshot': user?.username ?? 'SISTEM',
         'created_at': now,
         'updated_at': now,
       });
@@ -85,6 +91,10 @@ class PembelianService {
           'qty': item.qty,
           'harga_beli': item.hargaBeli,
           'subtotal': item.subtotal,
+          'batch_no': item.batchNo?.trim().isEmpty == true
+              ? null
+              : item.batchNo?.trim(),
+          'expired_date': item.expiredDate,
           'created_at': now,
         });
 
@@ -92,6 +102,7 @@ class PembelianService {
           'obat',
           {
             'stok_tersedia': stokSesudah,
+            'msk': (obat['msk'] as int? ?? 0) + item.qty,
             'harga_beli': item.hargaBeli,
             'updated_at': now,
           },
@@ -111,9 +122,60 @@ class PembelianService {
           'stok_sesudah': stokSesudah,
           'alasan': 'PEMBELIAN',
           'catatan': 'Pembelian $nomor',
+          'batch_no': item.batchNo,
+          'expired_date': item.expiredDate,
+          'user_id': user?.id,
+          'username_snapshot': user?.username ?? 'SISTEM',
           'tanggal': tanggalStr,
           'created_at': now,
         });
+
+        final batchNo = item.batchNo?.trim().isEmpty == true
+            ? null
+            : item.batchNo?.trim();
+        final batchWhere = [
+          'obat_id = ?',
+          batchNo == null ? 'batch_no IS NULL' : 'batch_no = ?',
+          item.expiredDate == null
+              ? 'expired_date IS NULL'
+              : 'expired_date = ?',
+        ].join(' AND ');
+        final batchArgs = <dynamic>[
+          item.obatId,
+          batchNo,
+          item.expiredDate,
+        ].where((value) => value != null).toList();
+        final existingBatch = await txn.query(
+          'stok_batch',
+          where: batchWhere,
+          whereArgs: batchArgs,
+          limit: 1,
+        );
+        if (existingBatch.isEmpty) {
+          await txn.insert('stok_batch', {
+            'obat_id': item.obatId,
+            'batch_no': batchNo,
+            'expired_date': item.expiredDate,
+            'qty_masuk': item.qty,
+            'qty_keluar': 0,
+            'stok_sisa': item.qty,
+            'supplier_id': supplierId,
+            'created_at': now,
+            'updated_at': now,
+          });
+        } else {
+          final batch = existingBatch.first;
+          await txn.update(
+            'stok_batch',
+            {
+              'qty_masuk': (batch['qty_masuk'] as int? ?? 0) + item.qty,
+              'stok_sisa': (batch['stok_sisa'] as int? ?? 0) + item.qty,
+              'updated_at': now,
+            },
+            where: 'id = ?',
+            whereArgs: [batch['id']],
+          );
+        }
 
         savedItems.add(
           DetailPembelian(
@@ -127,6 +189,8 @@ class PembelianService {
             namaObat: obat['nama'] as String?,
             kodeObat: obat['kode_obat'] as String?,
             satuan: obat['satuan'] as String?,
+            batchNo: batchNo,
+            expiredDate: item.expiredDate,
           ),
         );
       }
@@ -146,6 +210,18 @@ class PembelianService {
         items: savedItems,
       );
     });
+
+    await _auditService.log(
+      aksi: 'PEMBELIAN',
+      entitas: 'PEMBELIAN',
+      entitasId: saved.id,
+      nominal: saved.total,
+      alasan: saved.nomorFaktur == null
+          ? 'TANPA NOMOR FAKTUR'
+          : 'FAKTUR SUPPLIER',
+      detail: '${saved.nomorPembelian} | ${saved.items.length} item',
+    );
+    return saved;
   }
 
   Future<List<Pembelian>> getAll({int limit = 100}) async {

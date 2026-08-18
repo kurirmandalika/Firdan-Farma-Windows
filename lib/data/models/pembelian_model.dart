@@ -10,6 +10,8 @@ class Pembelian {
   final double diskon;
   final double total;
   final String? catatan;
+  final int? userId;
+  final String? usernameSnapshot;
   final String createdAt;
   final String? updatedAt;
   final List<DetailPembelian> items;
@@ -31,6 +33,8 @@ class Pembelian {
     this.updatedAt,
     this.items = const [],
     this.namaSupplier,
+    this.userId,
+    this.usernameSnapshot,
   }) : total = total ?? (subtotal - diskon),
        createdAt = createdAt ?? DateTime.now().toIso8601String();
 
@@ -52,6 +56,8 @@ class Pembelian {
           map['created_at'] as String? ?? DateTime.now().toIso8601String(),
       updatedAt: map['updated_at'] as String?,
       namaSupplier: map['nama_supplier'] as String?,
+      userId: map['user_id'] as int?,
+      usernameSnapshot: map['username_snapshot'] as String?,
       items: items,
     );
   }
@@ -69,6 +75,8 @@ class Pembelian {
       'catatan': catatan,
       'created_at': createdAt,
       'updated_at': updatedAt,
+      'user_id': userId,
+      'username_snapshot': usernameSnapshot,
     };
   }
 }

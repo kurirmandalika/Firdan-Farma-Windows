@@ -14,10 +14,12 @@ import 'package:firdan_farma_windows/application/providers/transaksi_provider.da
 import 'package:firdan_farma_windows/application/providers/laporan_provider.dart';
 import 'package:firdan_farma_windows/application/providers/pembelian_provider.dart';
 import 'package:firdan_farma_windows/application/providers/pin_provider.dart';
+import 'package:firdan_farma_windows/application/providers/auth_provider.dart';
 
 import 'package:firdan_farma_windows/features/pin/presentation/pin_gate_screen.dart';
 import 'package:firdan_farma_windows/features/shell/presentation/main_desktop_shell.dart';
 import 'package:firdan_farma_windows/features/startup/presentation/startup_splash_screen.dart';
+import 'package:firdan_farma_windows/features/auth/presentation/login_gate_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +45,7 @@ class FirdanFarmaApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => PembelianProvider()),
         ChangeNotifierProvider(create: (_) => LaporanProvider()),
         ChangeNotifierProvider(create: (_) => PinProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
       ],
       child: Consumer<AppProvider>(
         builder: (context, appProvider, _) {
@@ -57,7 +60,9 @@ class FirdanFarmaApp extends StatelessWidget {
             darkTheme: AppTheme.darkTheme,
             themeMode: appProvider.themeMode,
             home: const StartupSplashScreen(
-              child: PinGateScreen(child: MainDesktopShell()),
+              child: LoginGateScreen(
+                child: PinGateScreen(child: MainDesktopShell()),
+              ),
             ),
           );
         },

@@ -55,7 +55,22 @@ class ReceiptDialog extends StatelessWidget {
                 'Bayar via : ${transaksi.metodePembayaran}',
                 style: const pw.TextStyle(fontSize: 9),
               ),
+              pw.Text(
+                'Kode laporan : ${transaksi.kodeLaporan ?? '-'}',
+                style: const pw.TextStyle(fontSize: 9),
+              ),
               pw.Divider(thickness: 0.5),
+              if (transaksi.diskon > 0)
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Diskon', style: const pw.TextStyle(fontSize: 9)),
+                    pw.Text(
+                      currencyFormatter.format(transaksi.diskon),
+                      style: const pw.TextStyle(fontSize: 9),
+                    ),
+                  ],
+                ),
               ...transaksi.items.map(
                 (item) => pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -231,7 +246,28 @@ class ReceiptDialog extends StatelessWidget {
                       color: AppTheme.textSecondary,
                     ),
                   ),
+                  Text(
+                    'Kode laporan: ${transaksi.kodeLaporan ?? '-'}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
                   const Divider(height: 16),
+                  if (transaksi.diskon > 0)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Diskon', style: TextStyle(fontSize: 12)),
+                        Text(
+                          '- ${currencyFormatter.format(transaksi.diskon)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.dangerRed,
+                          ),
+                        ),
+                      ],
+                    ),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 180),
                     child: ListView.separated(

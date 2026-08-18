@@ -5,6 +5,8 @@ class DetailPembelian {
   final int qty;
   final double hargaBeli;
   final double subtotal;
+  final String? batchNo;
+  final String? expiredDate;
   final String createdAt;
 
   // Joined display fields
@@ -23,6 +25,8 @@ class DetailPembelian {
     this.namaObat,
     this.kodeObat,
     this.satuan,
+    this.batchNo,
+    this.expiredDate,
   }) : subtotal = subtotal ?? qty * hargaBeli,
        createdAt = createdAt ?? DateTime.now().toIso8601String();
 
@@ -34,6 +38,8 @@ class DetailPembelian {
       qty: map['qty'] as int,
       hargaBeli: (map['harga_beli'] as num).toDouble(),
       subtotal: (map['subtotal'] as num).toDouble(),
+      batchNo: map['batch_no'] as String?,
+      expiredDate: map['expired_date'] as String?,
       createdAt:
           map['created_at'] as String? ?? DateTime.now().toIso8601String(),
       namaObat: map['nama_obat'] as String?,
@@ -50,6 +56,8 @@ class DetailPembelian {
       'qty': qty,
       'harga_beli': hargaBeli,
       'subtotal': subtotal,
+      'batch_no': batchNo,
+      'expired_date': expiredDate,
       'created_at': createdAt,
     };
   }

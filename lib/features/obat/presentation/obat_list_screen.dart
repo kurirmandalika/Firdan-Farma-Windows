@@ -438,14 +438,17 @@ class _ObatListHeader extends StatelessWidget {
       ),
       child: const Row(
         children: [
-          SizedBox(width: 104, child: _HeaderLabel('Kode')),
+          SizedBox(width: 84, child: _HeaderLabel('Kode')),
           Expanded(flex: 3, child: _HeaderLabel('Nama Obat')),
-          SizedBox(width: 80, child: _HeaderLabel('Satuan')),
-          SizedBox(width: 112, child: _HeaderLabel('HB')),
-          SizedBox(width: 112, child: _HeaderLabel('HJ')),
-          SizedBox(width: 112, child: _HeaderLabel('Stok')),
-          SizedBox(width: 90, child: _HeaderLabel('Status')),
-          SizedBox(width: 96, child: _HeaderLabel('Aksi')),
+          SizedBox(width: 68, child: _HeaderLabel('Satuan')),
+          SizedBox(width: 52, child: _HeaderLabel('AWL')),
+          SizedBox(width: 52, child: _HeaderLabel('MSK')),
+          SizedBox(width: 52, child: _HeaderLabel('KLR')),
+          SizedBox(width: 72, child: _HeaderLabel('SISA')),
+          SizedBox(width: 100, child: _HeaderLabel('HB')),
+          SizedBox(width: 100, child: _HeaderLabel('HJ')),
+          SizedBox(width: 78, child: _HeaderLabel('Status')),
+          SizedBox(width: 84, child: _HeaderLabel('Aksi')),
         ],
       ),
     );
@@ -507,7 +510,7 @@ class _ObatListRow extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 104,
+            width: 84,
             child: Text(
               obat.kodeObat,
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
@@ -516,22 +519,25 @@ class _ObatListRow extends StatelessWidget {
             ),
           ),
           Expanded(flex: 3, child: _MedicineName(obat: obat)),
-          SizedBox(width: 80, child: _TextCell(obat.satuan)),
+          SizedBox(width: 68, child: _TextCell(obat.satuan)),
+          SizedBox(width: 52, child: _NumberCell(obat.awl)),
+          SizedBox(width: 52, child: _NumberCell(obat.msk)),
+          SizedBox(width: 52, child: _NumberCell(obat.klr)),
+          SizedBox(width: 72, child: _StockBadge(obat: obat)),
           SizedBox(
-            width: 112,
+            width: 100,
             child: _PriceCell(text: currencyFormatter.format(obat.hargaBeli)),
           ),
           SizedBox(
-            width: 112,
+            width: 100,
             child: _PriceCell(
               text: currencyFormatter.format(obat.hargaJual),
               emphasized: true,
             ),
           ),
-          SizedBox(width: 112, child: _StockBadge(obat: obat)),
-          SizedBox(width: 90, child: _StatusBadge(obat: obat)),
+          SizedBox(width: 78, child: _StatusBadge(obat: obat)),
           SizedBox(
-            width: 96,
+            width: 84,
             child: _ActionButtons(
               obat: obat,
               onEdit: onEdit,
@@ -569,6 +575,15 @@ class _ObatListRow extends StatelessWidget {
             children: [
               _MetaChip(icon: Icons.qr_code_2, label: obat.kodeObat),
               _MetaChip(icon: Icons.inventory_2_outlined, label: obat.satuan),
+              _MetaChip(
+                icon: Icons.table_rows_outlined,
+                label: 'AWL ${obat.awl}',
+              ),
+              _MetaChip(icon: Icons.add_box_outlined, label: 'MSK ${obat.msk}'),
+              _MetaChip(
+                icon: Icons.indeterminate_check_box_outlined,
+                label: 'KLR ${obat.klr}',
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -652,6 +667,26 @@ class _TextCell extends StatelessWidget {
   }
 }
 
+class _NumberCell extends StatelessWidget {
+  final int value;
+
+  const _NumberCell(this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      value.toString(),
+      style: TextStyle(
+        fontSize: 12,
+        color: AppTheme.textSecondary,
+        fontWeight: FontWeight.w700,
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+}
+
 class _PriceCell extends StatelessWidget {
   final String text;
   final bool emphasized;
@@ -716,52 +751,72 @@ class _ActionButtons extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!obat.isActive) {
-      return Align(
-        alignment: Alignment.centerLeft,
-        child: Tooltip(
-          message: 'Aktifkan kembali',
-          child: IconButton(
-            onPressed: onReactivate,
-            icon: Icon(
-              Icons.restore_outlined,
-              color: AppTheme.primaryTeal,
-              size: 20,
+    return PopupMenuButton<_MedicineAction>(
+      tooltip: 'Aksi obat',
+      onSelected: (action) {
+        switch (action) {
+          case _MedicineAction.edit:
+            onEdit?.call();
+          case _MedicineAction.deactivate:
+            onDelete?.call();
+          case _MedicineAction.reactivate:
+            onReactivate?.call();
+        }
+      },
+      itemBuilder: (context) {
+        if (!obat.isActive) {
+          return [
+            const PopupMenuItem<_MedicineAction>(
+              value: _MedicineAction.reactivate,
+              child: Row(
+                children: [
+                  Icon(Icons.restore_outlined, size: 18),
+                  SizedBox(width: 10),
+                  Text('Aktifkan kembali'),
+                ],
+              ),
+            ),
+          ];
+        }
+        return [
+          const PopupMenuItem<_MedicineAction>(
+            value: _MedicineAction.edit,
+            child: Row(
+              children: [
+                Icon(Icons.edit_outlined, size: 18),
+                SizedBox(width: 10),
+                Text('Edit obat'),
+              ],
             ),
           ),
-        ),
-      );
-    }
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Tooltip(
-          message: 'Edit obat',
-          child: IconButton(
-            icon: Icon(
-              Icons.edit_outlined,
-              color: AppTheme.primaryTeal,
-              size: 20,
+          PopupMenuItem<_MedicineAction>(
+            value: _MedicineAction.deactivate,
+            child: Row(
+              children: [
+                Icon(Icons.delete_outline, color: AppTheme.dangerRed, size: 18),
+                const SizedBox(width: 10),
+                const Text('Nonaktifkan'),
+              ],
             ),
-            onPressed: onEdit,
           ),
+        ];
+      },
+      child: Container(
+        height: 36,
+        width: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppTheme.bgSubtle,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: AppTheme.borderLight),
         ),
-        Tooltip(
-          message: 'Nonaktifkan obat',
-          child: IconButton(
-            icon: Icon(
-              Icons.delete_outline,
-              color: AppTheme.dangerRed,
-              size: 20,
-            ),
-            onPressed: onDelete,
-          ),
-        ),
-      ],
+        child: Icon(Icons.more_horiz, size: 20, color: AppTheme.textSecondary),
+      ),
     );
   }
 }
+
+enum _MedicineAction { edit, deactivate, reactivate }
 
 class _MetaChip extends StatelessWidget {
   final IconData icon;
@@ -818,6 +873,9 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
   late TextEditingController _satuanController;
   late TextEditingController _hargaBeliController;
   late TextEditingController _hargaJualController;
+  late TextEditingController _awlController;
+  late TextEditingController _mskController;
+  late TextEditingController _klrController;
   late TextEditingController _stokTersediaController;
   late TextEditingController _stokMinimalController;
   late TextEditingController _deskripsiController;
@@ -838,6 +896,9 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
     _hargaJualController = TextEditingController(
       text: o != null ? o.hargaJual.toStringAsFixed(0) : '',
     );
+    _awlController = TextEditingController(text: o != null ? '${o.awl}' : '0');
+    _mskController = TextEditingController(text: o != null ? '${o.msk}' : '0');
+    _klrController = TextEditingController(text: o != null ? '${o.klr}' : '0');
     _stokTersediaController = TextEditingController(
       text: o != null ? o.stokTersedia.toString() : '0',
     );
@@ -856,6 +917,11 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
     if (_selectedKategoriId == null && katList.isNotEmpty) {
       _selectedKategoriId = katList.first.id;
     }
+
+    _awlController.addListener(_syncSisaFromExcelStock);
+    _mskController.addListener(_syncSisaFromExcelStock);
+    _klrController.addListener(_syncSisaFromExcelStock);
+    _syncSisaFromExcelStock();
   }
 
   @override
@@ -865,10 +931,24 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
     _satuanController.dispose();
     _hargaBeliController.dispose();
     _hargaJualController.dispose();
+    _awlController.dispose();
+    _mskController.dispose();
+    _klrController.dispose();
     _stokTersediaController.dispose();
     _stokMinimalController.dispose();
     _deskripsiController.dispose();
     super.dispose();
+  }
+
+  void _syncSisaFromExcelStock() {
+    final awl = int.tryParse(_awlController.text.trim()) ?? 0;
+    final msk = int.tryParse(_mskController.text.trim()) ?? 0;
+    final klr = int.tryParse(_klrController.text.trim()) ?? 0;
+    final sisa = awl + msk - klr;
+    final nextText = sisa.toString();
+    if (_stokTersediaController.text != nextText) {
+      _stokTersediaController.text = nextText;
+    }
   }
 
   Future<void> _save() async {
@@ -882,12 +962,18 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
 
       final hargaBeli = double.tryParse(_hargaBeliController.text.trim());
       final hargaJual = double.tryParse(_hargaJualController.text.trim());
+      final awl = int.tryParse(_awlController.text.trim());
+      final msk = int.tryParse(_mskController.text.trim());
+      final klr = int.tryParse(_klrController.text.trim());
       final stokTersedia = int.tryParse(_stokTersediaController.text.trim());
       final stokMinimal = int.tryParse(_stokMinimalController.text.trim());
       final satuan = _satuanController.text.trim().toUpperCase();
 
       if (hargaBeli == null ||
           hargaJual == null ||
+          awl == null ||
+          msk == null ||
+          klr == null ||
           stokTersedia == null ||
           stokMinimal == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -903,11 +989,25 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
 
       if (hargaBeli < 0 ||
           hargaJual < 0 ||
+          awl < 0 ||
+          msk < 0 ||
+          klr < 0 ||
           stokTersedia < 0 ||
           stokMinimal < 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Harga dan stok tidak boleh kurang dari 0.'),
+            backgroundColor: AppTheme.dangerRed,
+          ),
+        );
+        return;
+      }
+
+      final calculatedSisa = awl + msk - klr;
+      if (calculatedSisa != stokTersedia || calculatedSisa < 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('SISA harus sama dengan AWL + MSK - KLR.'),
             backgroundColor: AppTheme.dangerRed,
           ),
         );
@@ -960,9 +1060,10 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
         supplierId: _selectedSupplierId,
         hargaBeli: hargaBeli,
         hargaJual: hargaJual,
-        stokTersedia: widget.obat == null
-            ? stokTersedia
-            : widget.obat!.stokTersedia,
+        awl: awl,
+        msk: msk,
+        klr: klr,
+        stokTersedia: stokTersedia,
         stokMinimal: stokMinimal,
         deskripsi: _deskripsiController.text.trim(),
         createdAt: widget.obat?.createdAt ?? DateTime.now().toIso8601String(),
@@ -1093,34 +1194,67 @@ class _ObatFormDialogState extends State<_ObatFormDialog> {
                   children: [
                     Expanded(
                       child: TextFormField(
-                        controller: _stokTersediaController,
+                        controller: _awlController,
                         keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          labelText: widget.obat == null
-                              ? 'Stok Awal *'
-                              : 'Stok Sekarang',
-                          helperText: widget.obat == null
-                              ? 'Dicatat sebagai SALDO_AWAL'
-                              : 'Ubah stok lewat menu Stok/Pembelian',
+                        decoration: const InputDecoration(
+                          labelText: 'AWL *',
+                          helperText: 'Awal',
                         ),
-                        enabled: widget.obat == null,
                         validator: (v) =>
                             v == null || v.isEmpty ? 'Wajib diisi' : null,
                       ),
                     ),
-                    const SizedBox(width: 14),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: TextFormField(
-                        controller: _stokMinimalController,
+                        controller: _mskController,
                         keyboardType: TextInputType.number,
                         decoration: const InputDecoration(
-                          labelText: 'Stok Minimal *',
+                          labelText: 'MSK *',
+                          helperText: 'Masuk',
+                        ),
+                        validator: (v) =>
+                            v == null || v.isEmpty ? 'Wajib diisi' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _klrController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'KLR *',
+                          helperText: 'Keluar',
+                        ),
+                        validator: (v) =>
+                            v == null || v.isEmpty ? 'Wajib diisi' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _stokTersediaController,
+                        keyboardType: TextInputType.number,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: 'SISA',
+                          helperText: 'Auto',
                         ),
                         validator: (v) =>
                             v == null || v.isEmpty ? 'Wajib diisi' : null,
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _stokMinimalController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'Stok Minimal *',
+                  ),
+                  validator: (v) =>
+                      v == null || v.isEmpty ? 'Wajib diisi' : null,
                 ),
                 const SizedBox(height: 12),
                 Row(

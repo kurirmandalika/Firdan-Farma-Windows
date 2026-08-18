@@ -14,6 +14,7 @@ import 'package:firdan_farma_windows/core/constants/app_constants.dart';
 import 'package:firdan_farma_windows/core/theme/app_theme.dart';
 import 'package:firdan_farma_windows/core/utils/responsive_helper.dart';
 import 'package:firdan_farma_windows/data/database/database_helper.dart';
+import 'package:firdan_farma_windows/data/services/auth_service.dart';
 import 'package:firdan_farma_windows/features/backup_excel/presentation/backup_excel_screen.dart';
 import 'package:firdan_farma_windows/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:firdan_farma_windows/features/master/presentation/kategori_supplier_screen.dart';
@@ -22,6 +23,7 @@ import 'package:firdan_farma_windows/features/obat/presentation/obat_list_screen
 import 'package:firdan_farma_windows/features/pembelian/presentation/pembelian_screen.dart';
 import 'package:firdan_farma_windows/features/stok/presentation/stok_screen.dart';
 import 'package:firdan_farma_windows/features/transaksi/presentation/transaksi_screen.dart';
+import 'package:firdan_farma_windows/features/pengguna/presentation/pengguna_screen.dart';
 import 'package:firdan_farma_windows/shared/widgets/brand_logo.dart';
 
 class MainDesktopShell extends StatelessWidget {
@@ -36,7 +38,10 @@ class MainDesktopShell extends StatelessWidget {
     _NavDestination('Master', 'Kategori', Icons.category_outlined),
     _NavDestination('Laporan', 'Analitik', Icons.analytics_outlined),
     _NavDestination('Data', 'Backup', Icons.table_chart_outlined),
+    _NavDestination('Pengguna', 'Akun & role', Icons.manage_accounts_outlined),
   ];
+  static const _primaryDestinationIndexes = [0, 1, 2, 4, 6];
+  static const _adminDestinationIndexes = [3, 5, 7, 8];
 
   Widget _getScreen(int index) {
     switch (index) {
@@ -56,6 +61,8 @@ class MainDesktopShell extends StatelessWidget {
         return const LaporanScreen();
       case 7:
         return const BackupExcelScreen();
+      case 8:
+        return const PenggunaScreen();
       default:
         return const DashboardScreen();
     }
@@ -157,6 +164,8 @@ class MainDesktopShell extends StatelessWidget {
                 isCollapsed: isCollapsed,
                 selectedIndex: currentIndex,
                 destinations: _destinations,
+                primaryDestinationIndexes: _primaryDestinationIndexes,
+                adminDestinationIndexes: _adminDestinationIndexes,
                 onDestinationSelected: appProv.setNavIndex,
                 onLock: pinProv.lockApp,
               ),
@@ -204,6 +213,8 @@ class _Sidebar extends StatelessWidget {
   final bool isCollapsed;
   final int selectedIndex;
   final List<_NavDestination> destinations;
+  final List<int> primaryDestinationIndexes;
+  final List<int> adminDestinationIndexes;
   final ValueChanged<int> onDestinationSelected;
   final VoidCallback onLock;
 
@@ -211,6 +222,8 @@ class _Sidebar extends StatelessWidget {
     required this.isCollapsed,
     required this.selectedIndex,
     required this.destinations,
+    required this.primaryDestinationIndexes,
+    required this.adminDestinationIndexes,
     required this.onDestinationSelected,
     required this.onLock,
   });
@@ -276,14 +289,32 @@ class _Sidebar extends StatelessWidget {
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
-                itemCount: destinations.length,
+                itemCount: primaryDestinationIndexes.length + 2,
                 itemBuilder: (context, index) {
-                  final item = destinations[index];
+                  if (index == primaryDestinationIndexes.length) {
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Divider(color: AppTheme.borderLight),
+                    );
+                  }
+
+                  if (index == primaryDestinationIndexes.length + 1) {
+                    return _MoreSidebarItem(
+                      destinations: destinations,
+                      indexes: adminDestinationIndexes,
+                      selectedIndex: selectedIndex,
+                      isCollapsed: isCollapsed,
+                      onSelected: onDestinationSelected,
+                    );
+                  }
+
+                  final destinationIndex = primaryDestinationIndexes[index];
+                  final item = destinations[destinationIndex];
                   return _SidebarItem(
                     item: item,
-                    isSelected: selectedIndex == index,
+                    isSelected: selectedIndex == destinationIndex,
                     isCollapsed: isCollapsed,
-                    onTap: () => onDestinationSelected(index),
+                    onTap: () => onDestinationSelected(destinationIndex),
                   );
                 },
               ),
@@ -324,7 +355,8 @@ class _Sidebar extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Kasir Utama',
+                                  AuthSession.currentUser?.namaTampilan ??
+                                      'Kasir Utama',
                                   style: TextStyle(
                                     color: AppTheme.textPrimary,
                                     fontSize: 12,
@@ -334,7 +366,9 @@ class _Sidebar extends StatelessWidget {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
-                                  'Mode offline',
+                                  AuthSession.currentUser?.role == 'SUPER_ADMIN'
+                                      ? 'Super Admin | Mode offline'
+                                      : 'Karyawan | Mode offline',
                                   style: TextStyle(
                                     color: AppTheme.textSecondary,
                                     fontSize: 10,
@@ -468,6 +502,122 @@ class _SidebarItem extends StatelessWidget {
   }
 }
 
+class _MoreSidebarItem extends StatelessWidget {
+  final List<_NavDestination> destinations;
+  final List<int> indexes;
+  final int selectedIndex;
+  final bool isCollapsed;
+  final ValueChanged<int> onSelected;
+
+  const _MoreSidebarItem({
+    required this.destinations,
+    required this.indexes,
+    required this.selectedIndex,
+    required this.isCollapsed,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final containsSelected = indexes.contains(selectedIndex);
+    final activeItem = containsSelected ? destinations[selectedIndex] : null;
+    final label = activeItem?.label ?? 'Administrasi';
+    final subtitle = activeItem == null
+        ? 'Pembelian, data, akun'
+        : activeItem.subtitle;
+
+    final child = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Material(
+        color: containsSelected ? AppTheme.sidebarSelected : Colors.transparent,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          onTap: null,
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: isCollapsed ? 0 : 12,
+              vertical: 10,
+            ),
+            child: Row(
+              mainAxisAlignment: isCollapsed
+                  ? MainAxisAlignment.center
+                  : MainAxisAlignment.start,
+              children: [
+                Icon(
+                  activeItem?.icon ?? Icons.more_horiz,
+                  color: containsSelected
+                      ? AppTheme.primaryTeal
+                      : AppTheme.textSecondary,
+                  size: 20,
+                ),
+                if (!isCollapsed) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: containsSelected
+                                ? FontWeight.w800
+                                : FontWeight.w600,
+                            color: containsSelected
+                                ? AppTheme.textPrimary
+                                : AppTheme.textSecondary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: containsSelected
+                                ? AppTheme.primaryTeal
+                                : AppTheme.textMuted,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.expand_more, size: 18, color: AppTheme.textMuted),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return PopupMenuButton<int>(
+      tooltip: 'Menu administrasi',
+      onSelected: onSelected,
+      itemBuilder: (context) => indexes
+          .map(
+            (index) => PopupMenuItem<int>(
+              value: index,
+              child: Row(
+                children: [
+                  Icon(destinations[index].icon, size: 18),
+                  const SizedBox(width: 10),
+                  Text(destinations[index].label),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+      child: isCollapsed
+          ? Tooltip(message: 'Administrasi', preferBelow: false, child: child)
+          : child,
+    );
+  }
+}
+
 class _TopBar extends StatelessWidget {
   final String title;
   final String subtitle;
@@ -544,81 +694,123 @@ class _TopBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          _ThemeModeButton(isDarkMode: isDarkMode, onPressed: onToggleTheme),
-          const SizedBox(width: 8),
-          _ReloadButton(isReloading: isReloading, onPressed: onReload),
-          const SizedBox(width: 8),
           if (canShowDetails) const _ClockPill(),
-          if (!canShowDetails)
-            Tooltip(
-              message: 'Kunci aplikasi',
-              child: IconButton(
-                onPressed: onLock,
-                icon: Icon(
-                  Icons.lock_outline,
-                  color: AppTheme.warningOrange,
-                  size: 20,
-                ),
-              ),
-            ),
+          const SizedBox(width: 8),
+          _WorkspaceMenuButton(
+            isDarkMode: isDarkMode,
+            isReloading: isReloading,
+            onToggleTheme: onToggleTheme,
+            onReload: onReload,
+            onLock: onLock,
+          ),
         ],
       ),
     );
   }
 }
 
-class _ThemeModeButton extends StatelessWidget {
+class _WorkspaceMenuButton extends StatelessWidget {
   final bool isDarkMode;
-  final VoidCallback onPressed;
-
-  const _ThemeModeButton({required this.isDarkMode, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: isDarkMode ? 'Mode terang' : 'Mode malam',
-      child: IconButton(
-        onPressed: onPressed,
-        icon: Icon(
-          isDarkMode ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-          color: AppTheme.textPrimary,
-          size: 20,
-        ),
-      ),
-    );
-  }
-}
-
-class _ReloadButton extends StatelessWidget {
   final bool isReloading;
-  final VoidCallback onPressed;
+  final VoidCallback onToggleTheme;
+  final VoidCallback onReload;
+  final VoidCallback onLock;
 
-  const _ReloadButton({required this.isReloading, required this.onPressed});
+  const _WorkspaceMenuButton({
+    required this.isDarkMode,
+    required this.isReloading,
+    required this.onToggleTheme,
+    required this.onReload,
+    required this.onLock,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Muat ulang data',
-      child: IconButton(
-        onPressed: isReloading ? null : onPressed,
-        icon: isReloading
+    return PopupMenuButton<_WorkspaceAction>(
+      tooltip: 'Pengaturan aplikasi',
+      onSelected: (action) {
+        switch (action) {
+          case _WorkspaceAction.theme:
+            onToggleTheme();
+          case _WorkspaceAction.reload:
+            if (!isReloading) onReload();
+          case _WorkspaceAction.lock:
+            onLock();
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<_WorkspaceAction>(
+          value: _WorkspaceAction.theme,
+          child: Row(
+            children: [
+              Icon(
+                isDarkMode
+                    ? Icons.light_mode_outlined
+                    : Icons.dark_mode_outlined,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Text(isDarkMode ? 'Mode terang' : 'Mode malam'),
+            ],
+          ),
+        ),
+        PopupMenuItem<_WorkspaceAction>(
+          value: _WorkspaceAction.reload,
+          enabled: !isReloading,
+          child: Row(
+            children: [
+              isReloading
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.primaryTeal,
+                      ),
+                    )
+                  : const Icon(Icons.refresh_rounded, size: 18),
+              const SizedBox(width: 10),
+              const Text('Muat ulang data'),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        PopupMenuItem<_WorkspaceAction>(
+          value: _WorkspaceAction.lock,
+          child: Row(
+            children: [
+              Icon(Icons.lock_outline, color: AppTheme.warningOrange, size: 18),
+              const SizedBox(width: 10),
+              const Text('Kunci aplikasi'),
+            ],
+          ),
+        ),
+      ],
+      child: Container(
+        height: 38,
+        width: 38,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppTheme.bgSubtle,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: AppTheme.borderLight),
+        ),
+        child: isReloading
             ? SizedBox(
-                width: 18,
-                height: 18,
+                width: 17,
+                height: 17,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
                   color: AppTheme.primaryTeal,
                 ),
               )
-            : Icon(
-                Icons.refresh_rounded,
-                color: AppTheme.textPrimary,
-                size: 21,
-              ),
+            : Icon(Icons.more_vert, color: AppTheme.textPrimary, size: 21),
       ),
     );
   }
 }
+
+enum _WorkspaceAction { theme, reload, lock }
 
 class _ClockPill extends StatelessWidget {
   const _ClockPill();

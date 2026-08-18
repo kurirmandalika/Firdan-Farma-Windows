@@ -148,6 +148,49 @@ void main() {
     },
   );
 
+  test('crud obat mengikuti kolom Excel AWL MSK KLR SISA', () async {
+    final obatId = await obatService.insert(
+      Obat(
+        nama: 'OBAT CRUD EXCEL',
+        kodeObat: 'CRUDX001',
+        satuan: 'PCS',
+        kategoriId: 1,
+        hargaBeli: 1000,
+        hargaJual: 1500,
+        awl: 5,
+        msk: 3,
+        klr: 1,
+        stokTersedia: 7,
+        stokMinimal: 2,
+        createdAt: DateTime.now().toIso8601String(),
+      ),
+    );
+
+    var obat = await obatService.getById(obatId);
+    expect(obat?.awl, 5);
+    expect(obat?.msk, 3);
+    expect(obat?.klr, 1);
+    expect(obat?.stokTersedia, 7);
+
+    await obatService.update(
+      obat!.copyWith(nama: 'OBAT CRUD EXCEL EDIT', awl: 6, msk: 4, klr: 2),
+    );
+    obat = await obatService.getById(obatId);
+    expect(obat?.nama, 'OBAT CRUD EXCEL EDIT');
+    expect(obat?.awl, 6);
+    expect(obat?.msk, 4);
+    expect(obat?.klr, 2);
+    expect(obat?.stokTersedia, 8);
+
+    await obatService.delete(obatId);
+    obat = await obatService.getById(obatId);
+    expect(obat?.isActive, isFalse);
+
+    await obatService.reactivate(obatId);
+    obat = await obatService.getById(obatId);
+    expect(obat?.isActive, isTrue);
+  });
+
   test('penyesuaian stok mencatat selisih dan saldo akhir', () async {
     final obatId = await obatService.insert(
       Obat(
@@ -185,7 +228,7 @@ void main() {
       DateTime.now(),
       DateTime.now(),
     )).singleWhere((item) => item.obatId == obatId);
-    expect(report.klr, 0);
+    expect(report.klr, 2);
     expect(report.penyesuaianKeluar, 2);
     expect(report.sisa, 18);
   });

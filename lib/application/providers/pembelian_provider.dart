@@ -8,8 +8,16 @@ class PurchaseCartItem {
   final Obat obat;
   int qty;
   double hargaBeli;
+  String? batchNo;
+  String? expiredDate;
 
-  PurchaseCartItem({required this.obat, this.qty = 1, required this.hargaBeli});
+  PurchaseCartItem({
+    required this.obat,
+    this.qty = 1,
+    required this.hargaBeli,
+    this.batchNo,
+    this.expiredDate,
+  });
 
   double get subtotal => qty * hargaBeli;
 }
@@ -82,6 +90,20 @@ class PembelianProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void updateBatch(int obatId, String? batchNo) {
+    final index = _cartItems.indexWhere((item) => item.obat.id == obatId);
+    if (index < 0) return;
+    _cartItems[index].batchNo = batchNo?.trim();
+    notifyListeners();
+  }
+
+  void updateExpiredDate(int obatId, String? expiredDate) {
+    final index = _cartItems.indexWhere((item) => item.obat.id == obatId);
+    if (index < 0) return;
+    _cartItems[index].expiredDate = expiredDate;
+    notifyListeners();
+  }
+
   void removeFromCart(int obatId) {
     _cartItems.removeWhere((item) => item.obat.id == obatId);
     notifyListeners();
@@ -117,6 +139,8 @@ class PembelianProvider extends ChangeNotifier {
               namaObat: item.obat.nama,
               kodeObat: item.obat.kodeObat,
               satuan: item.obat.satuan,
+              batchNo: item.batchNo,
+              expiredDate: item.expiredDate,
             ),
           )
           .toList();

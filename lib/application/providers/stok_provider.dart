@@ -32,6 +32,8 @@ class StokProvider extends ChangeNotifier {
     String? alasan,
     double? hargaBeli,
     String? catatan,
+    String? batchNo,
+    String? expiredDate,
   }) async {
     final success = await _service.updateStok(
       obatId: obatId,
@@ -40,6 +42,8 @@ class StokProvider extends ChangeNotifier {
       alasan: alasan,
       hargaBeli: hargaBeli,
       catatan: catatan,
+      batchNo: batchNo,
+      expiredDate: expiredDate,
     );
     if (success) {
       await fetchMutasi();

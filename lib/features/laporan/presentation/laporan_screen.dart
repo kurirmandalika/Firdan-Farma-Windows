@@ -6,6 +6,8 @@ import 'package:firdan_farma_windows/core/constants/app_constants.dart';
 import 'package:firdan_farma_windows/core/theme/app_theme.dart';
 import 'package:firdan_farma_windows/core/utils/responsive_helper.dart';
 import 'package:firdan_farma_windows/data/services/laporan_service.dart';
+import 'package:firdan_farma_windows/data/services/auth_service.dart';
+import 'package:firdan_farma_windows/data/models/audit_log_model.dart';
 import 'package:firdan_farma_windows/data/services/spreadsheet_service.dart';
 import 'package:firdan_farma_windows/shared/widgets/app_page.dart';
 import 'package:firdan_farma_windows/shared/widgets/medical_card.dart';
@@ -420,52 +422,31 @@ class _LaporanScreenState extends State<LaporanScreen> {
                   'Ringkasan omzet, pembelian, laba kotor, dan stok per obat',
               icon: Icons.analytics_outlined,
               actions: [
-                OutlinedButton.icon(
-                  onPressed: lapProv.setToday,
-                  icon: const Icon(Icons.today, size: 17),
-                  label: const Text('Hari Ini'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: lapProv.setYesterday,
-                  icon: const Icon(Icons.history_outlined, size: 17),
-                  label: const Text('Kemarin'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: lapProv.setLast7Days,
-                  icon: const Icon(Icons.view_week_outlined, size: 17),
-                  label: const Text('7 Hari'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: lapProv.setThisMonth,
-                  icon: const Icon(Icons.calendar_month_outlined, size: 17),
-                  label: const Text('Bulan Ini'),
+                _ReportRangeMenu(
+                  onSelected: (range) {
+                    switch (range) {
+                      case _ReportRange.today:
+                        lapProv.setToday();
+                      case _ReportRange.yesterday:
+                        lapProv.setYesterday();
+                      case _ReportRange.last7Days:
+                        lapProv.setLast7Days();
+                      case _ReportRange.thisMonth:
+                        lapProv.setThisMonth();
+                    }
+                  },
                 ),
                 OutlinedButton.icon(
                   onPressed: _pickDateRange,
                   icon: Icon(Icons.date_range, color: AppTheme.primaryTeal),
                   label: Text('$dariStr - $sampaiStr'),
                 ),
-                ElevatedButton.icon(
-                  onPressed: _isExporting ? null : _exportExcel,
-                  icon: _isExporting
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.file_download_outlined, size: 17),
-                  label: const Text('Ekspor Excel'),
-                ),
-                ElevatedButton.icon(
-                  onPressed: _isPrinting || lapProv.isLoading
-                      ? null
-                      : _printReport,
-                  icon: _isPrinting
-                      ? const SizedBox.square(
-                          dimension: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.print_outlined, size: 17),
-                  label: const Text('Cetak PDF'),
+                _ReportOutputMenu(
+                  isExporting: _isExporting,
+                  isPrinting: _isPrinting,
+                  isLoading: lapProv.isLoading,
+                  onExportExcel: _exportExcel,
+                  onPrintReport: _printReport,
                 ),
               ],
               child: Column(
@@ -542,11 +523,21 @@ class _LaporanScreenState extends State<LaporanScreen> {
                     ],
                   ),
                   const SizedBox(height: 22),
+                  _PaymentSummaryCard(
+                    items: lapProv.paymentSummaries,
+                    currencyFormatter: currencyFormatter,
+                    reportDate: lapProv.dariTanggal,
+                  ),
+                  const SizedBox(height: 22),
                   _MedicineReportTable(
                     items: lapProv.medicineReports,
                     currencyFormatter: currencyFormatter,
                   ),
                   const SizedBox(height: 22),
+                  if (AuthSession.isSuperAdmin) ...[
+                    _AuditLogCard(items: lapProv.activityLogs),
+                    const SizedBox(height: 22),
+                  ],
                   MedicalCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -672,6 +663,286 @@ class _LaporanScreenState extends State<LaporanScreen> {
   }
 }
 
+enum _ReportRange { today, yesterday, last7Days, thisMonth }
+
+enum _ReportOutput { excel, pdf }
+
+class _ReportRangeMenu extends StatelessWidget {
+  final ValueChanged<_ReportRange> onSelected;
+
+  const _ReportRangeMenu({required this.onSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<_ReportRange>(
+      tooltip: 'Pilih periode cepat',
+      onSelected: onSelected,
+      itemBuilder: (context) => const [
+        PopupMenuItem(value: _ReportRange.today, child: Text('Hari ini')),
+        PopupMenuItem(value: _ReportRange.yesterday, child: Text('Kemarin')),
+        PopupMenuItem(value: _ReportRange.last7Days, child: Text('7 hari')),
+        PopupMenuItem(value: _ReportRange.thisMonth, child: Text('Bulan ini')),
+      ],
+      child: _HeaderMenuChip(
+        icon: Icons.tune,
+        label: 'Periode',
+        color: AppTheme.primaryTeal,
+      ),
+    );
+  }
+}
+
+class _ReportOutputMenu extends StatelessWidget {
+  final bool isExporting;
+  final bool isPrinting;
+  final bool isLoading;
+  final VoidCallback onExportExcel;
+  final VoidCallback onPrintReport;
+
+  const _ReportOutputMenu({
+    required this.isExporting,
+    required this.isPrinting,
+    required this.isLoading,
+    required this.onExportExcel,
+    required this.onPrintReport,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isBusy = isExporting || isPrinting;
+    return PopupMenuButton<_ReportOutput>(
+      tooltip: 'Simpan atau cetak laporan',
+      onSelected: (value) {
+        switch (value) {
+          case _ReportOutput.excel:
+            onExportExcel();
+          case _ReportOutput.pdf:
+            onPrintReport();
+        }
+      },
+      itemBuilder: (context) => [
+        PopupMenuItem<_ReportOutput>(
+          value: _ReportOutput.excel,
+          enabled: !isExporting,
+          child: Row(
+            children: [
+              isExporting
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.file_download_outlined, size: 17),
+              const SizedBox(width: 10),
+              const Text('Ekspor Excel'),
+            ],
+          ),
+        ),
+        PopupMenuItem<_ReportOutput>(
+          value: _ReportOutput.pdf,
+          enabled: !isPrinting && !isLoading,
+          child: Row(
+            children: [
+              isPrinting
+                  ? const SizedBox.square(
+                      dimension: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.print_outlined, size: 17),
+              const SizedBox(width: 10),
+              const Text('Cetak PDF'),
+            ],
+          ),
+        ),
+      ],
+      child: _HeaderMenuChip(
+        icon: isBusy ? Icons.hourglass_top : Icons.ios_share_outlined,
+        label: isBusy ? 'Memproses' : 'Simpan',
+        color: AppTheme.primaryTeal,
+      ),
+    );
+  }
+}
+
+class _HeaderMenuChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _HeaderMenuChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.borderStrong),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 17, color: color),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(color: color, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(width: 4),
+          Icon(Icons.expand_more, size: 17, color: color),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentSummaryCard extends StatelessWidget {
+  final List<SalesPaymentSummary> items;
+  final NumberFormat currencyFormatter;
+  final DateTime reportDate;
+
+  const _PaymentSummaryCard({
+    required this.items,
+    required this.currencyFormatter,
+    required this.reportDate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return MedicalCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppSectionHeader(
+            icon: Icons.account_balance_wallet_outlined,
+            title: 'Laporan per Metode Pembayaran',
+            subtitle: 'Periode bisnis ditutup setiap hari pukul 15.00',
+            trailing: Text(
+              DateFormat('dd MMM yyyy').format(reportDate),
+              style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (items.isEmpty)
+            const Text('Belum ada penjualan pada periode ini.')
+          else
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: items
+                  .map(
+                    (item) => Container(
+                      width: 210,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgSubtle,
+                        border: Border.all(color: AppTheme.borderLight),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${item.kodePrefix} | ${item.metodePembayaran}',
+                            style: const TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            currencyFormatter.format(item.total),
+                            style: TextStyle(
+                              color: AppTheme.primaryTeal,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          Text(
+                            '${item.jumlahTransaksi} transaksi',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuditLogCard extends StatelessWidget {
+  final List<AuditLog> items;
+
+  const _AuditLogCard({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return MedicalCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppSectionHeader(
+            icon: Icons.manage_search_outlined,
+            title: 'Audit Aktivitas Super Admin',
+            subtitle: 'Detail aksi pengguna untuk pemeriksaan kesalahan input',
+          ),
+          const SizedBox(height: 14),
+          if (items.isEmpty)
+            const Text('Belum ada aktivitas tercatat.')
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: items.length,
+              separatorBuilder: (_, _) => const Divider(height: 12),
+              itemBuilder: (context, index) {
+                final item = items[index];
+                final time = DateTime.tryParse(item.createdAt);
+                return ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    radius: 16,
+                    backgroundColor: AppTheme.primaryTealLight,
+                    child: Icon(
+                      Icons.history,
+                      size: 16,
+                      color: AppTheme.primaryTeal,
+                    ),
+                  ),
+                  title: Text(
+                    '${item.username ?? 'SISTEM'} | ${item.aksi} | ${item.entitas}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 12,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '${time == null ? item.createdAt : DateFormat('dd/MM/yyyy HH:mm:ss').format(time)}'
+                    '${item.metodePembayaran == null ? '' : ' | ${item.metodePembayaran}'}'
+                    '${item.nominal == null ? '' : ' | Rp ${item.nominal!.toStringAsFixed(0)}'}'
+                    '${item.alasan == null ? '' : ' | ${item.alasan}'}'
+                    '${item.detail == null ? '' : ' | ${item.detail}'}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _MedicineReportTable extends StatelessWidget {
   final List<MedicinePeriodReport> items;
   final NumberFormat currencyFormatter;
@@ -690,7 +961,7 @@ class _MedicineReportTable extends StatelessWidget {
           const AppSectionHeader(
             icon: Icons.table_chart_outlined,
             title: 'Laporan Stok dan Penjualan per Obat',
-            subtitle: 'AWL, MSK, KLR, dan SISA dihitung dari riwayat stok',
+            subtitle: 'AWL, MSK, KLR, dan SISA mengikuti snapshot katalog',
           ),
           const SizedBox(height: 16),
           const Divider(),

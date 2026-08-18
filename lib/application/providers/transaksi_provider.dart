@@ -30,6 +30,11 @@ class TransaksiProvider extends ChangeNotifier {
   String _metodePembayaran = 'TUNAI';
   String get metodePembayaran => _metodePembayaran;
 
+  double _diskon = 0;
+  double get diskon => _diskon;
+  bool _diberiDiskon = false;
+  bool get diberiDiskon => _diberiDiskon;
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -44,10 +49,11 @@ class TransaksiProvider extends ChangeNotifier {
 
   double get totalBelanja =>
       _cartItems.fold(0.0, (sum, item) => sum + item.subtotal);
+  double get totalTagihan => (totalBelanja - _diskon).clamp(0, double.infinity);
   double get effectiveBayar =>
-      _metodePembayaran == 'TUNAI' ? _bayar : totalBelanja;
-  double get kembali => (_metodePembayaran == 'TUNAI' && _bayar >= totalBelanja)
-      ? (_bayar - totalBelanja)
+      _metodePembayaran == 'TUNAI' ? _bayar : totalTagihan;
+  double get kembali => (_metodePembayaran == 'TUNAI' && _bayar >= totalTagihan)
+      ? (_bayar - totalTagihan)
       : 0.0;
   int get totalItemCount =>
       _cartItems.fold(0, (sum, item) => sum + item.jumlah);
@@ -130,6 +136,15 @@ class TransaksiProvider extends ChangeNotifier {
     _cartItems.clear();
     _bayar = 0.0;
     _metodePembayaran = 'TUNAI';
+    _diskon = 0;
+    _diberiDiskon = false;
+    notifyListeners();
+  }
+
+  void setDiscount(double amount, {bool applied = true}) {
+    _diskon = amount.clamp(0, totalBelanja).toDouble();
+    _diberiDiskon = applied;
+    if (_metodePembayaran != 'TUNAI') _bayar = totalTagihan;
     notifyListeners();
   }
 
@@ -142,7 +157,7 @@ class TransaksiProvider extends ChangeNotifier {
     if (!paymentMethods.contains(value)) return;
     _metodePembayaran = value;
     if (value != 'TUNAI') {
-      _bayar = totalBelanja;
+      _bayar = totalTagihan;
     }
     notifyListeners();
   }
@@ -154,7 +169,7 @@ class TransaksiProvider extends ChangeNotifier {
     if (_cartItems.isEmpty) {
       throw Exception('Keranjang belanja masih kosong!');
     }
-    if (_metodePembayaran == 'TUNAI' && _bayar < totalBelanja) {
+    if (_metodePembayaran == 'TUNAI' && _bayar < totalTagihan) {
       throw Exception('Nominal pembayaran kurang dari total!');
     }
 
@@ -177,9 +192,12 @@ class TransaksiProvider extends ChangeNotifier {
           .toList();
 
       final resultTx = await _service.createTransaksi(
-        total: totalBelanja,
+        total: totalTagihan,
         bayar: effectiveBayar,
         metodePembayaran: _metodePembayaran,
+        subtotalSebelumDiskon: totalBelanja,
+        diskon: _diskon,
+        diberiDiskon: _diberiDiskon,
         items: detailItems,
       );
 

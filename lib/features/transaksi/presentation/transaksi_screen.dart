@@ -44,6 +44,58 @@ class _TransaksiScreenState extends State<TransaksiScreen> {
 
   Future<void> _handleCheckout(TransaksiProvider txProv) async {
     try {
+      final diberiDiskon = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Konfirmasi Diskon'),
+          content: const Text('Apakah transaksi ini diberi diskon?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Tidak'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Ya, beri diskon'),
+            ),
+          ],
+        ),
+      );
+      if (diberiDiskon == null || !mounted) return;
+      if (diberiDiskon) {
+        final discountController = TextEditingController(text: '0');
+        final discount = await showDialog<double>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Nominal Diskon'),
+            content: TextField(
+              controller: discountController,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Diskon (Rp)'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Batal'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final value = double.tryParse(discountController.text) ?? -1;
+                  if (value < 0 || value > txProv.totalBelanja) return;
+                  Navigator.pop(dialogContext, value);
+                },
+                child: const Text('Terapkan'),
+              ),
+            ],
+          ),
+        );
+        discountController.dispose();
+        if (discount == null || !mounted) return;
+        txProv.setDiscount(discount, applied: true);
+      } else {
+        txProv.setDiscount(0, applied: false);
+      }
       final tx = await txProv.processCheckout();
       _bayarController.clear();
       if (tx != null && mounted) {
@@ -601,7 +653,7 @@ class _PaymentPanel extends StatelessWidget {
     final canCheckout =
         txProv.cartItems.isNotEmpty &&
         (txProv.metodePembayaran != 'TUNAI' ||
-            txProv.bayar >= txProv.totalBelanja) &&
+            txProv.bayar >= txProv.totalTagihan) &&
         !txProv.isLoading;
 
     return Column(
@@ -628,6 +680,38 @@ class _PaymentPanel extends StatelessWidget {
             ),
           ],
         ),
+        if (txProv.diskon > 0) ...[
+          const SizedBox(height: 5),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Diskon', style: TextStyle(fontSize: 12)),
+              Text(
+                '- ${currencyFormatter.format(txProv.diskon)}',
+                style: TextStyle(color: AppTheme.dangerRed, fontSize: 12),
+              ),
+            ],
+          ),
+        ],
+        if (txProv.diskon > 0) ...[
+          const SizedBox(height: 5),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Total setelah diskon',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+              Text(
+                currencyFormatter.format(txProv.totalTagihan),
+                style: TextStyle(
+                  fontWeight: FontWeight.w900,
+                  color: AppTheme.primaryTeal,
+                ),
+              ),
+            ],
+          ),
+        ],
         const SizedBox(height: 10),
         DropdownButtonFormField<String>(
           initialValue: txProv.metodePembayaran,
@@ -650,7 +734,7 @@ class _PaymentPanel extends StatelessWidget {
             if (value == null) return;
             txProv.setMetodePembayaran(value);
             if (value != 'TUNAI') {
-              bayarController.text = txProv.totalBelanja.toStringAsFixed(0);
+              bayarController.text = txProv.totalTagihan.toStringAsFixed(0);
             }
           },
         ),
@@ -675,43 +759,27 @@ class _PaymentPanel extends StatelessWidget {
         ),
         if (txProv.metodePembayaran == 'TUNAI') ...[
           const SizedBox(height: 8),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                OutlinedButton(
-                  onPressed: txProv.totalBelanja > 0
-                      ? () => onPreset(txProv.totalBelanja, txProv)
-                      : null,
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 7,
-                    ),
-                  ),
-                  child: const Text('Uang Pas', style: TextStyle(fontSize: 11)),
-                ),
-                const SizedBox(width: 6),
-                ...[10000, 20000, 50000, 100000].map(
-                  (amt) => Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: OutlinedButton(
-                      onPressed: () => onPreset(amt.toDouble(), txProv),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 7,
-                        ),
-                      ),
-                      child: Text(
-                        currencyFormatter.format(amt),
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                    ),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: txProv.totalTagihan > 0
+                    ? () => onPreset(txProv.totalTagihan, txProv)
+                    : null,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
                   ),
                 ),
-              ],
-            ),
+                icon: const Icon(Icons.check_circle_outline, size: 16),
+                label: const Text('Uang Pas', style: TextStyle(fontSize: 12)),
+              ),
+              const SizedBox(width: 8),
+              _CashPresetMenu(
+                currencyFormatter: currencyFormatter,
+                onSelected: (amount) => onPreset(amount.toDouble(), txProv),
+              ),
+            ],
           ),
         ],
         const SizedBox(height: 10),
@@ -765,6 +833,62 @@ class _PaymentPanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _CashPresetMenu extends StatelessWidget {
+  final NumberFormat currencyFormatter;
+  final ValueChanged<int> onSelected;
+
+  const _CashPresetMenu({
+    required this.currencyFormatter,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<int>(
+      tooltip: 'Nominal cepat',
+      onSelected: onSelected,
+      itemBuilder: (context) => [10000, 20000, 50000, 100000]
+          .map(
+            (amount) => PopupMenuItem<int>(
+              value: amount,
+              child: Text(currencyFormatter.format(amount)),
+            ),
+          )
+          .toList(),
+      child: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.bgSubtle,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: AppTheme.borderStrong),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.payments_outlined,
+              size: 16,
+              color: AppTheme.primaryTeal,
+            ),
+            const SizedBox(width: 7),
+            Text(
+              'Nominal',
+              style: TextStyle(
+                color: AppTheme.primaryTeal,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 3),
+            Icon(Icons.expand_more, size: 16, color: AppTheme.primaryTeal),
+          ],
+        ),
+      ),
     );
   }
 }

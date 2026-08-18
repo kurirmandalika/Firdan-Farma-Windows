@@ -1,8 +1,11 @@
 import 'package:firdan_farma_windows/data/database/database_helper.dart';
 import 'package:firdan_farma_windows/data/models/stok_model.dart';
+import 'package:firdan_farma_windows/data/services/audit_service.dart';
+import 'package:firdan_farma_windows/data/services/auth_service.dart';
 
 class StokService {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
+  final AuditService _auditService = AuditService();
 
   Future<List<StokMutasi>> getAllMutasi({int limit = 300}) async {
     final db = await _dbHelper.database;
@@ -26,6 +29,8 @@ class StokService {
     String? alasan,
     double? hargaBeli,
     String? catatan,
+    String? batchNo,
+    String? expiredDate,
   }) async {
     if (jumlah <= 0) return false;
     final cleanNote = catatan?.trim();
@@ -35,7 +40,8 @@ class StokService {
 
     final db = await _dbHelper.database;
 
-    return await db.transaction((txn) async {
+    final user = AuthSession.currentUser;
+    final saved = await db.transaction((txn) async {
       final obatMaps = await txn.query(
         'obat',
         where: 'id = ?',
@@ -88,6 +94,10 @@ class StokService {
         'obat',
         {
           'stok_tersedia': stokBaru,
+          if (jenis == 'masuk')
+            'msk': (obatMaps.first['msk'] as int? ?? 0) + jumlah,
+          if (jenis == 'keluar')
+            'klr': (obatMaps.first['klr'] as int? ?? 0) + jumlah,
           if (jenis == 'masuk') 'harga_beli': hargaBeliEfektif,
           'updated_at': now,
         },
@@ -106,12 +116,74 @@ class StokService {
         'stok_sesudah': stokBaru,
         'alasan': jenis == 'masuk' ? 'RESTOK' : alasanKode,
         'catatan': cleanNote,
+        'batch_no': batchNo?.trim().isEmpty == true ? null : batchNo?.trim(),
+        'expired_date': expiredDate,
+        'user_id': user?.id,
+        'username_snapshot': user?.username ?? 'SISTEM',
         'tanggal': now,
         'created_at': now,
       });
 
+      if (jenis == 'masuk') {
+        final cleanBatch = batchNo?.trim().isEmpty == true
+            ? null
+            : batchNo?.trim();
+        final batchWhere = [
+          'obat_id = ?',
+          cleanBatch == null ? 'batch_no IS NULL' : 'batch_no = ?',
+          expiredDate == null ? 'expired_date IS NULL' : 'expired_date = ?',
+        ].join(' AND ');
+        final batchArgs = <dynamic>[
+          obatId,
+          cleanBatch,
+          expiredDate,
+        ].where((value) => value != null).toList();
+        final existingBatch = await txn.query(
+          'stok_batch',
+          where: batchWhere,
+          whereArgs: batchArgs,
+          limit: 1,
+        );
+        if (existingBatch.isEmpty) {
+          await txn.insert('stok_batch', {
+            'obat_id': obatId,
+            'batch_no': cleanBatch,
+            'expired_date': expiredDate,
+            'qty_masuk': jumlah,
+            'qty_keluar': 0,
+            'stok_sisa': jumlah,
+            'created_at': now,
+            'updated_at': now,
+          });
+        } else {
+          final batch = existingBatch.first;
+          await txn.update(
+            'stok_batch',
+            {
+              'qty_masuk': (batch['qty_masuk'] as int? ?? 0) + jumlah,
+              'stok_sisa': (batch['stok_sisa'] as int? ?? 0) + jumlah,
+              'updated_at': now,
+            },
+            where: 'id = ?',
+            whereArgs: [batch['id']],
+          );
+        }
+      }
+
       return true;
     });
+    if (saved) {
+      await _auditService.log(
+        aksi: jenis == 'masuk' ? 'STOK_MASUK' : 'STOK_KELUAR',
+        entitas: 'STOK',
+        entitasId: obatId,
+        nominal: jumlah.toDouble(),
+        alasan: alasan,
+        detail:
+            '$cleanNote${batchNo?.trim().isNotEmpty == true ? ' | Batch ${batchNo!.trim()}' : ''}',
+      );
+    }
+    return saved;
   }
 
   Future<bool> adjustToPhysicalStock({
@@ -144,7 +216,14 @@ class StokService {
       final now = DateTime.now().toIso8601String();
       await txn.update(
         'obat',
-        {'stok_tersedia': stokFisik, 'updated_at': now},
+        {
+          'stok_tersedia': stokFisik,
+          if (selisih > 0)
+            'msk': (obatMaps.first['msk'] as int? ?? 0) + selisih,
+          if (selisih < 0)
+            'klr': (obatMaps.first['klr'] as int? ?? 0) + selisih.abs(),
+          'updated_at': now,
+        },
         where: 'id = ?',
         whereArgs: [obatId],
       );

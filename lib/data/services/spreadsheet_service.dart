@@ -69,32 +69,29 @@ class SpreadsheetService {
     excel.setDefaultSheet('Data Obat Apotek');
 
     sheetObject.appendRow([
-      TextCellValue('ID'),
-      TextCellValue('Kode Obat'),
-      TextCellValue('Nama Obat'),
-      TextCellValue('Satuan'),
-      TextCellValue('Kategori'),
-      TextCellValue('Supplier'),
-      TextCellValue('Harga Beli'),
-      TextCellValue('Harga Jual'),
-      TextCellValue('Stok Tersedia'),
-      TextCellValue('Stok Minimal'),
-      TextCellValue('Deskripsi'),
+      TextCellValue('No'),
+      TextCellValue('Nama Barang'),
+      TextCellValue('SATUAN'),
+      TextCellValue('AWL'),
+      TextCellValue('MSK'),
+      TextCellValue('KLR'),
+      TextCellValue('SISA'),
+      TextCellValue('HargaBeli'),
+      TextCellValue('HargaJual'),
     ]);
 
-    for (var obat in obatList) {
+    for (var i = 0; i < obatList.length; i++) {
+      final obat = obatList[i];
       sheetObject.appendRow([
-        IntCellValue(obat.id ?? 0),
-        TextCellValue(obat.kodeObat),
+        IntCellValue(i + 1),
         TextCellValue(obat.nama),
         TextCellValue(obat.satuan),
-        TextCellValue(obat.namaKategori ?? 'Umum'),
-        TextCellValue(obat.namaSupplier ?? '-'),
+        IntCellValue(obat.awl),
+        IntCellValue(obat.msk),
+        IntCellValue(obat.klr),
+        IntCellValue(obat.stokTersedia),
         DoubleCellValue(obat.hargaBeli),
         DoubleCellValue(obat.hargaJual),
-        IntCellValue(obat.stokTersedia),
-        IntCellValue(obat.stokMinimal),
-        TextCellValue(obat.deskripsi ?? ''),
       ]);
     }
 
@@ -133,25 +130,27 @@ class SpreadsheetService {
     excel.setDefaultSheet('Data Obat Apotek');
 
     sheet.appendRow([
-      TextCellValue('Kode Obat'),
-      TextCellValue('Nama Obat'),
-      TextCellValue('Satuan'),
-      TextCellValue('Harga Beli'),
-      TextCellValue('Harga Jual'),
-      TextCellValue('Stok Awal'),
-      TextCellValue('Stok Minimal'),
-      TextCellValue('Deskripsi'),
+      TextCellValue('No'),
+      TextCellValue('Nama Barang'),
+      TextCellValue('SATUAN'),
+      TextCellValue('AWL'),
+      TextCellValue('MSK'),
+      TextCellValue('KLR'),
+      TextCellValue('SISA'),
+      TextCellValue('HargaBeli'),
+      TextCellValue('HargaJual'),
     ]);
 
     sheet.appendRow([
-      TextCellValue('OBT-001'),
+      IntCellValue(1),
       TextCellValue('Contoh Nama Obat'),
       TextCellValue('STRIP'),
+      IntCellValue(10),
+      IntCellValue(5),
+      IntCellValue(2),
+      IntCellValue(13),
       DoubleCellValue(5000),
       DoubleCellValue(8000),
-      IntCellValue(100),
-      IntCellValue(10),
-      TextCellValue('Deskripsi opsional'),
     ]);
 
     const saveName = 'Template_Import_DataObat_FirdanFarma.xlsx';
@@ -401,9 +400,8 @@ class SpreadsheetService {
         var colNama = mapping.nama;
 
         // ── 7. Fallback posisional jika kolom nama masih tidak ditemukan ──
-        colNama = mapping.nama;
         if (colNama < 0) {
-          if (mapping.nama >= 0 && !headerFound && allRows.isNotEmpty) {
+          if (!headerFound && allRows.isNotEmpty) {
             // Tidak ada header sama sekali — cari kolom pertama yang isi teks
             for (int ci = 0; ci < (allRows.first.length); ci++) {
               final samples = _gatherColSample(allRows, ci, 5);
@@ -423,6 +421,7 @@ class SpreadsheetService {
             continue;
           }
         }
+        final effectiveMapping = mapping.copyWith(nama: colNama);
 
         // ── 8. Proses setiap baris data ──
         int rowNum = 0;
@@ -443,33 +442,35 @@ class SpreadsheetService {
               ? stringRows[ri]
               : _rowToStrings(row);
           if (_looksLikeHeaderRow(rowText) ||
-              _isSummaryRow(rowText, mapping.nama)) {
+              _isSummaryRow(rowText, effectiveMapping.nama)) {
             skipped++;
             continue;
           }
 
           try {
             // Nama — wajib ada
-            final nama = _str(row, mapping.nama);
-            if (nama.isEmpty) {
+            final nama = _str(row, effectiveMapping.nama);
+            if (nama.isEmpty || _isNumericStr(nama)) {
               skipped++;
               continue;
             }
 
             // Kode — auto generate jika tidak ada
-            String kode = mapping.kode >= 0 ? _str(row, mapping.kode) : '';
+            String kode = effectiveMapping.kode >= 0
+                ? _str(row, effectiveMapping.kode)
+                : '';
             if (kode.isEmpty || kode == '0') {
               kode = _makeKode(nama, rowNum);
             }
 
             // Harga jual
-            var hargaJual = mapping.hargaJual >= 0
-                ? _dbl(row, mapping.hargaJual)
+            var hargaJual = effectiveMapping.hargaJual >= 0
+                ? _dbl(row, effectiveMapping.hargaJual)
                 : 0.0;
 
             // Harga beli (estimasi 70% dari harga jual jika tidak ada)
-            var hargaBeli = mapping.hargaBeli >= 0
-                ? _dbl(row, mapping.hargaBeli)
+            var hargaBeli = effectiveMapping.hargaBeli >= 0
+                ? _dbl(row, effectiveMapping.hargaBeli)
                 : (hargaJual > 0 ? hargaJual * 0.7 : 0.0);
             if (hargaJual <= 0 && hargaBeli > 0) {
               hargaJual = hargaBeli;
@@ -480,30 +481,68 @@ class SpreadsheetService {
 
             // Stok
             final hasStockValue =
-                mapping.stok >= 0 && _str(row, mapping.stok).isNotEmpty;
+                effectiveMapping.stok >= 0 &&
+                _str(row, effectiveMapping.stok).isNotEmpty;
             final hasMinStockValue =
-                mapping.stokMinimal >= 0 &&
-                _str(row, mapping.stokMinimal).isNotEmpty;
-            final stok = hasStockValue ? _int(row, mapping.stok) : 0;
+                effectiveMapping.stokMinimal >= 0 &&
+                _str(row, effectiveMapping.stokMinimal).isNotEmpty;
+            final stok = hasStockValue ? _int(row, effectiveMapping.stok) : 0;
             final stokMin = hasMinStockValue
-                ? _int(row, mapping.stokMinimal, def: 5)
+                ? _int(row, effectiveMapping.stokMinimal, def: 5)
                 : 5;
+            final hasAwlValue =
+                effectiveMapping.stokAwal >= 0 &&
+                _str(row, effectiveMapping.stokAwal).isNotEmpty;
+            final hasMskValue =
+                effectiveMapping.stokMasuk >= 0 &&
+                _str(row, effectiveMapping.stokMasuk).isNotEmpty;
+            final hasKlrValue =
+                effectiveMapping.stokKeluar >= 0 &&
+                _str(row, effectiveMapping.stokKeluar).isNotEmpty;
+            final hasExcelStockValues =
+                hasAwlValue || hasMskValue || hasKlrValue;
+            final awl = hasAwlValue
+                ? _int(row, effectiveMapping.stokAwal)
+                : (!hasExcelStockValues && hasStockValue ? stok : 0);
+            final msk = hasMskValue ? _int(row, effectiveMapping.stokMasuk) : 0;
+            final klr = hasKlrValue
+                ? _int(row, effectiveMapping.stokKeluar)
+                : 0;
+            final sisa = hasStockValue ? stok : awl + msk - klr;
 
-            // Deskripsi / satuan
-            String desk = mapping.deskripsi >= 0
-                ? _str(row, mapping.deskripsi)
+            // Satuan dan deskripsi
+            final satuan = effectiveMapping.satuan >= 0
+                ? _cleanSatuan(_str(row, effectiveMapping.satuan))
                 : '';
-            if (desk.isEmpty && mapping.satuan >= 0) {
-              desk = _str(row, mapping.satuan);
-            }
+            String desk = effectiveMapping.deskripsi >= 0
+                ? _str(row, effectiveMapping.deskripsi)
+                : '';
 
             // Cek existing
             final existing = await _obatService.getByKode(kode);
             importedCodes.add(kode);
             if (existing != null) {
+              if (hasStockValue && existing.id != null) {
+                await _stokService.adjustToPhysicalStock(
+                  obatId: existing.id!,
+                  stokFisik: stok,
+                  alasan: 'IMPORT_XLSX',
+                  catatan: 'Sinkronisasi stok dari import Excel',
+                );
+              }
               await _obatService.update(
                 existing.copyWith(
                   nama: nama,
+                  satuan: satuan.isNotEmpty ? satuan : existing.satuan,
+                  awl: hasExcelStockValues || hasStockValue
+                      ? awl
+                      : existing.awl,
+                  msk: hasExcelStockValues || hasStockValue
+                      ? msk
+                      : existing.msk,
+                  klr: hasExcelStockValues || hasStockValue
+                      ? klr
+                      : existing.klr,
                   hargaBeli: hargaBeli > 0 ? hargaBeli : existing.hargaBeli,
                   hargaJual: hargaJual > 0 ? hargaJual : existing.hargaJual,
                   stokMinimal: hasMinStockValue && stokMin > 0
@@ -513,24 +552,20 @@ class SpreadsheetService {
                   isActive: true,
                 ),
               );
-              if (hasStockValue && existing.id != null) {
-                await _stokService.adjustToPhysicalStock(
-                  obatId: existing.id!,
-                  stokFisik: stok,
-                  alasan: 'IMPORT_XLSX',
-                  catatan: 'Sinkronisasi stok dari import Excel',
-                );
-              }
               updated++;
             } else {
               await _obatService.insert(
                 Obat(
                   nama: nama,
                   kodeObat: kode,
+                  satuan: satuan.isNotEmpty ? satuan : 'PCS',
                   kategoriId: defaultKategoriId,
                   hargaBeli: hargaBeli,
                   hargaJual: hargaJual,
-                  stokTersedia: hasStockValue ? stok : 0,
+                  awl: awl,
+                  msk: msk,
+                  klr: klr,
+                  stokTersedia: sisa < 0 ? 0 : sisa,
                   stokMinimal: stokMin > 0 ? stokMin : 5,
                   deskripsi: desk.isNotEmpty ? desk : null,
                   createdAt: DateTime.now().toIso8601String(),
@@ -664,7 +699,7 @@ class SpreadsheetService {
         return '${v.year}-${v.month.toString().padLeft(2, '0')}-${v.day.toString().padLeft(2, '0')}';
       }
       if (v is FormulaCellValue) {
-        return v.formula.trim();
+        return '';
       }
       // Fallback umum
       return v.toString().trim();
@@ -792,6 +827,12 @@ class SpreadsheetService {
   bool _isNumericStr(String s) {
     return _parseFlexibleNumber(s) != null;
   }
+
+  String _cleanSatuan(String raw) {
+    final value = raw.trim();
+    if (value.isEmpty || _isNumericStr(value)) return '';
+    return value.toUpperCase();
+  }
 }
 
 class _ColumnMapping {
@@ -799,6 +840,9 @@ class _ColumnMapping {
   final int nama;
   final int hargaBeli;
   final int hargaJual;
+  final int stokAwal;
+  final int stokMasuk;
+  final int stokKeluar;
   final int stok;
   final int stokMinimal;
   final int satuan;
@@ -809,6 +853,9 @@ class _ColumnMapping {
     this.nama = -1,
     this.hargaBeli = -1,
     this.hargaJual = -1,
+    this.stokAwal = -1,
+    this.stokMasuk = -1,
+    this.stokKeluar = -1,
     this.stok = -1,
     this.stokMinimal = -1,
     this.satuan = -1,
@@ -821,6 +868,9 @@ class _ColumnMapping {
       nama,
       hargaBeli,
       hargaJual,
+      stokAwal,
+      stokMasuk,
+      stokKeluar,
       stok,
       stokMinimal,
       satuan,
@@ -834,8 +884,12 @@ class _ColumnMapping {
       'nama': nama,
       'hargaBeli': hargaBeli,
       'hargaJual': hargaJual,
+      'awl': stokAwal,
+      'msk': stokMasuk,
+      'klr': stokKeluar,
       'stok': stok,
       'stokMinimal': stokMinimal,
+      'satuan': satuan,
       'deskripsi': deskripsi,
     };
   }
@@ -845,6 +899,9 @@ class _ColumnMapping {
     int? nama,
     int? hargaBeli,
     int? hargaJual,
+    int? stokAwal,
+    int? stokMasuk,
+    int? stokKeluar,
     int? stok,
     int? stokMinimal,
     int? satuan,
@@ -855,6 +912,9 @@ class _ColumnMapping {
       nama: nama ?? this.nama,
       hargaBeli: hargaBeli ?? this.hargaBeli,
       hargaJual: hargaJual ?? this.hargaJual,
+      stokAwal: stokAwal ?? this.stokAwal,
+      stokMasuk: stokMasuk ?? this.stokMasuk,
+      stokKeluar: stokKeluar ?? this.stokKeluar,
       stok: stok ?? this.stok,
       stokMinimal: stokMinimal ?? this.stokMinimal,
       satuan: satuan ?? this.satuan,
@@ -949,6 +1009,9 @@ enum _ImportField {
   nama,
   hargaBeli,
   hargaJual,
+  stokAwal,
+  stokMasuk,
+  stokKeluar,
   stokMinimal,
   stok,
   satuan,
@@ -965,6 +1028,8 @@ _ColumnDetection _detectColumnMappingFromRows(
       rows,
       startIndex: header.index + 1,
       fixed: header.mapping,
+      inferStockMinimal: header.mapping.stokMinimal >= 0,
+      inferDescription: header.mapping.deskripsi >= 0,
     );
     return _ColumnDetection(
       headerIndex: header.index,
@@ -1014,17 +1079,57 @@ _HeaderCandidate? _findBestHeader(List<List<String>> rows) {
   final maxRows = rows.length < 15 ? rows.length : 15;
 
   for (var ri = 0; ri < maxRows; ri++) {
-    final candidate = _scoreHeaderRow(rows[ri], ri);
-    if (candidate == null || !candidate.isUsable) continue;
-    if (best == null ||
-        candidate.score > best.score ||
-        (candidate.score == best.score &&
-            candidate.recognizedFields > best.recognizedFields)) {
-      best = candidate;
+    final candidates = <List<String>>[rows[ri]];
+    for (var lookahead = 1; lookahead <= 2; lookahead++) {
+      final merged = _mergeHeaderRows(rows, ri, lookahead);
+      if (!_sameRowLabels(merged, rows[ri])) candidates.add(merged);
+    }
+
+    for (final labels in candidates) {
+      final candidate = _scoreHeaderRow(labels, ri);
+      if (candidate == null || !candidate.isUsable) continue;
+      if (best == null ||
+          candidate.score > best.score ||
+          (candidate.score == best.score &&
+              candidate.recognizedFields > best.recognizedFields)) {
+        best = candidate;
+      }
     }
   }
 
   return best;
+}
+
+List<String> _mergeHeaderRows(
+  List<List<String>> rows,
+  int rowIndex,
+  int lookahead,
+) {
+  final end = (rowIndex + lookahead) < rows.length
+      ? rowIndex + lookahead
+      : rows.length - 1;
+  var maxLength = 0;
+  for (var ri = rowIndex; ri <= end; ri++) {
+    if (rows[ri].length > maxLength) maxLength = rows[ri].length;
+  }
+
+  return List.generate(maxLength, (ci) {
+    for (var ri = rowIndex; ri <= end; ri++) {
+      if (ci >= rows[ri].length) continue;
+      final value = rows[ri][ci].trim();
+      if (value.isEmpty || _parseFlexibleNumber(value) != null) continue;
+      return value;
+    }
+    return '';
+  });
+}
+
+bool _sameRowLabels(List<String> left, List<String> right) {
+  if (left.length != right.length) return false;
+  for (var i = 0; i < left.length; i++) {
+    if (left[i] != right[i]) return false;
+  }
+  return true;
 }
 
 _HeaderCandidate? _scoreHeaderRow(List<String> row, int rowIndex) {
@@ -1065,6 +1170,15 @@ _HeaderCandidate? _scoreHeaderRow(List<String> row, int rowIndex) {
         break;
       case _ImportField.hargaJual:
         mapping = mapping.copyWith(hargaJual: bestIndex);
+        break;
+      case _ImportField.stokAwal:
+        mapping = mapping.copyWith(stokAwal: bestIndex);
+        break;
+      case _ImportField.stokMasuk:
+        mapping = mapping.copyWith(stokMasuk: bestIndex);
+        break;
+      case _ImportField.stokKeluar:
+        mapping = mapping.copyWith(stokKeluar: bestIndex);
         break;
       case _ImportField.stokMinimal:
         mapping = mapping.copyWith(stokMinimal: bestIndex);
@@ -1146,7 +1260,9 @@ int _scoreHeaderForField(String raw, _ImportField field) {
       }
       if (_containsAny(header, [
         'harga beli',
+        'hargabeli',
         'h beli',
+        'hb',
         'harga modal',
         'harga pokok',
         'purchase price',
@@ -1165,7 +1281,9 @@ int _scoreHeaderForField(String raw, _ImportField field) {
       }
       if (_containsAny(header, [
         'harga jual',
+        'hargajual',
         'h jual',
+        'hj',
         'harga eceran',
         'harga ecer',
         'selling price',
@@ -1183,6 +1301,44 @@ int _scoreHeaderForField(String raw, _ImportField field) {
           header == 'harga satuan' ||
           header == 'unit price') {
         return 10;
+      }
+      return 0;
+
+    case _ImportField.stokAwal:
+      if (header == 'awl' ||
+          _containsAny(header, [
+            'stok awal',
+            'saldo awal',
+            'initial stock',
+            'opening stock',
+          ])) {
+        return 18;
+      }
+      return 0;
+
+    case _ImportField.stokMasuk:
+      if (header == 'msk' ||
+          _containsAny(header, [
+            'stok masuk',
+            'pemasukan',
+            'barang masuk',
+            'masuk',
+            'incoming stock',
+          ])) {
+        return 18;
+      }
+      return 0;
+
+    case _ImportField.stokKeluar:
+      if (header == 'klr' ||
+          _containsAny(header, [
+            'stok keluar',
+            'penjualan keluar',
+            'barang keluar',
+            'keluar',
+            'outgoing stock',
+          ])) {
+        return 18;
       }
       return 0;
 
@@ -1209,6 +1365,27 @@ int _scoreHeaderForField(String raw, _ImportField field) {
       if (_containsAny(header, ['minimal', 'minimum', 'reorder', 'safety'])) {
         return 0;
       }
+      if (header == 'sisa' ||
+          header == 'saldo' ||
+          _containsAny(header, [
+            'stok akhir',
+            'sisa stok',
+            'saldo akhir',
+            'stok sisa',
+            'ending stock',
+            'closing stock',
+          ])) {
+        return 20;
+      }
+      if (header == 'msk' ||
+          header.startsWith('msk ') ||
+          header == 'klr' ||
+          header.startsWith('klr ')) {
+        return 0;
+      }
+      if (header == 'awl' || header.startsWith('awl ')) {
+        return _containsAny(header, ['stok awal']) ? 8 : 0;
+      }
       if (_containsAny(header, [
         'stok tersedia',
         'stok saat ini',
@@ -1219,6 +1396,13 @@ int _scoreHeaderForField(String raw, _ImportField field) {
         'on hand',
       ])) {
         return 18;
+      }
+      if (_containsAny(header, [
+        'stok awal',
+        'initial stock',
+        'opening stock',
+      ])) {
+        return 14;
       }
       if (_containsAny(header, [
         'stok',
@@ -1271,6 +1455,8 @@ _ColumnMapping _inferMappingFromData(
   List<List<String>> rows, {
   int startIndex = 0,
   _ColumnMapping fixed = const _ColumnMapping(),
+  bool inferStockMinimal = true,
+  bool inferDescription = true,
 }) {
   final profiles = _buildColumnProfiles(rows, startIndex: startIndex);
   final used = fixed.usedColumns;
@@ -1279,6 +1465,9 @@ _ColumnMapping _inferMappingFromData(
   var nama = fixed.nama;
   var hargaBeli = fixed.hargaBeli;
   var hargaJual = fixed.hargaJual;
+  var stokAwal = fixed.stokAwal;
+  var stokMasuk = fixed.stokMasuk;
+  var stokKeluar = fixed.stokKeluar;
   var stok = fixed.stok;
   var stokMinimal = fixed.stokMinimal;
   var satuan = fixed.satuan;
@@ -1296,6 +1485,9 @@ _ColumnMapping _inferMappingFromData(
 
   if (hargaBeli >= 0) used.add(hargaBeli);
   if (hargaJual >= 0) used.add(hargaJual);
+  if (stokAwal >= 0) used.add(stokAwal);
+  if (stokMasuk >= 0) used.add(stokMasuk);
+  if (stokKeluar >= 0) used.add(stokKeluar);
   final pricePick = _pickPriceColumns(
     profiles,
     used,
@@ -1313,20 +1505,25 @@ _ColumnMapping _inferMappingFromData(
     stok = _pickStockColumn(profiles, used);
     if (stok >= 0) used.add(stok);
   }
-  if (stokMinimal < 0) {
+  if (stokMinimal < 0 && inferStockMinimal) {
     stokMinimal = _pickStockMinimalColumn(profiles, used, stokColumn: stok);
     if (stokMinimal >= 0) used.add(stokMinimal);
   }
 
   if (satuan < 0) satuan = _pickTextColumnBySamples(profiles, used);
   if (satuan >= 0) used.add(satuan);
-  if (deskripsi < 0) deskripsi = _pickDescriptionColumn(profiles, used);
+  if (deskripsi < 0 && inferDescription) {
+    deskripsi = _pickDescriptionColumn(profiles, used);
+  }
 
   return _ColumnMapping(
     kode: kode,
     nama: nama,
     hargaBeli: hargaBeli,
     hargaJual: hargaJual,
+    stokAwal: stokAwal,
+    stokMasuk: stokMasuk,
+    stokKeluar: stokKeluar,
     stok: stok,
     stokMinimal: stokMinimal,
     satuan: satuan,
@@ -1526,11 +1723,20 @@ bool _isSummaryLabel(String value) {
       value == 'subtotal' ||
       value == 'grand total' ||
       value == 'jumlah total' ||
-      value == 'total keseluruhan';
+      value == 'total keseluruhan' ||
+      value == 'sisa stok' ||
+      value == 'pembelian' ||
+      value == 'penjualan' ||
+      value == 'laba' ||
+      value == 'laba rugi';
 }
 
 String _normalizeHeader(String value) {
   return value
+      .replaceAllMapped(
+        RegExp(r'([a-z])([A-Z])'),
+        (match) => '${match.group(1)} ${match.group(2)}',
+      )
       .toLowerCase()
       .replaceAll(RegExp(r'[_\-/\\]+'), ' ')
       .replaceAll(RegExp(r'[\(\)\[\]\{\}:;,.]+'), ' ')

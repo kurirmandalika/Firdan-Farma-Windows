@@ -7,6 +7,9 @@ class Obat {
   final int? supplierId;
   final double hargaBeli;
   final double hargaJual;
+  final int awl;
+  final int msk;
+  final int klr;
   final int stokMinimal;
   final int stokTersedia;
   final String? deskripsi;
@@ -27,6 +30,9 @@ class Obat {
     this.supplierId,
     required this.hargaBeli,
     required this.hargaJual,
+    this.awl = 0,
+    this.msk = 0,
+    this.klr = 0,
     this.stokMinimal = 5,
     this.stokTersedia = 0,
     this.deskripsi,
@@ -39,6 +45,7 @@ class Obat {
 
   bool get isStokMenipis => stokTersedia <= stokMinimal;
   bool get isHabis => stokTersedia <= 0;
+  int get sisaHitung => awl + msk - klr;
 
   factory Obat.fromMap(Map<String, dynamic> map) {
     return Obat(
@@ -52,6 +59,9 @@ class Obat {
       supplierId: map['supplier_id'] as int?,
       hargaBeli: (map['harga_beli'] as num).toDouble(),
       hargaJual: (map['harga_jual'] as num).toDouble(),
+      awl: map['awl'] as int? ?? 0,
+      msk: map['msk'] as int? ?? 0,
+      klr: map['klr'] as int? ?? 0,
       stokMinimal: map['stok_minimal'] as int? ?? 5,
       stokTersedia: map['stok_tersedia'] as int? ?? 0,
       deskripsi: map['deskripsi'] as String?,
@@ -74,6 +84,9 @@ class Obat {
       'supplier_id': supplierId,
       'harga_beli': hargaBeli,
       'harga_jual': hargaJual,
+      'awl': awl,
+      'msk': msk,
+      'klr': klr,
       'stok_minimal': stokMinimal,
       'stok_tersedia': stokTersedia,
       'deskripsi': deskripsi,
@@ -92,6 +105,9 @@ class Obat {
     int? supplierId,
     double? hargaBeli,
     double? hargaJual,
+    int? awl,
+    int? msk,
+    int? klr,
     int? stokMinimal,
     int? stokTersedia,
     String? deskripsi,
@@ -110,6 +126,9 @@ class Obat {
       supplierId: supplierId ?? this.supplierId,
       hargaBeli: hargaBeli ?? this.hargaBeli,
       hargaJual: hargaJual ?? this.hargaJual,
+      awl: awl ?? this.awl,
+      msk: msk ?? this.msk,
+      klr: klr ?? this.klr,
       stokMinimal: stokMinimal ?? this.stokMinimal,
       stokTersedia: stokTersedia ?? this.stokTersedia,
       deskripsi: deskripsi ?? this.deskripsi,
